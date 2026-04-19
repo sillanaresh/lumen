@@ -8,7 +8,7 @@ This repo is **v0.1**: a single-file, zero-build web app that demonstrates the c
 
 ## Live demo
 
-→ **[Open Lumen](./index.html)** — or visit the deployed version (see badge/link at top of this repo).
+→ **[sillanaresh.github.io/lumen](https://sillanaresh.github.io/lumen/)**
 
 ## What's in v0.1
 

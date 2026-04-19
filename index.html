@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lumen — a second brain that never leaves your browser</title>
+<meta name="description" content="Lumen is a local-first knowledge graph. Your notes, visualized and connected — and they never leave your browser." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        },
+        colors: {
+          ink: {
+            950: '#07080b',
+            900: '#0b0d12',
+            800: '#11141b',
+            700: '#181c26',
+            600: '#232836',
+            500: '#333a4d',
+            400: '#5a637a',
+            300: '#8b94ab',
+            200: '#c5cbda',
+            100: '#e7eaf2',
+          },
+          accent: {
+            500: '#ffd166',
+            400: '#ffe29a',
+          },
+          pulse: {
+            500: '#7dd3fc',
+            400: '#bae6fd',
+          },
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { background: #07080b; }
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    color: #e7eaf2;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .prose-lumen h1, .prose-lumen h2, .prose-lumen h3 { color: #e7eaf2; font-weight: 700; letter-spacing: -0.01em; }
+  .prose-lumen h1 { font-size: 1.875rem; margin-top: 0.25rem; margin-bottom: 1rem; }
+  .prose-lumen h2 { font-size: 1.375rem; margin-top: 2rem; margin-bottom: 0.75rem; }
+  .prose-lumen h3 { font-size: 1.125rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+  .prose-lumen p { color: #c5cbda; line-height: 1.75; margin-bottom: 1rem; }
+  .prose-lumen ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 1rem; color: #c5cbda; }
+  .prose-lumen ol { list-style: decimal; padding-left: 1.25rem; margin-bottom: 1rem; color: #c5cbda; }
+  .prose-lumen li { margin-bottom: 0.35rem; line-height: 1.7; }
+  .prose-lumen strong { color: #ffe29a; font-weight: 600; }
+  .prose-lumen em { color: #bae6fd; }
+  .prose-lumen code { font-family: 'JetBrains Mono', monospace; background: #181c26; color: #ffe29a; padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.875em; }
+  .prose-lumen pre { background: #11141b; border: 1px solid #232836; border-radius: 0.6rem; padding: 1rem; overflow-x: auto; margin-bottom: 1rem; }
+  .prose-lumen pre code { background: transparent; color: #e7eaf2; padding: 0; }
+  .prose-lumen blockquote { border-left: 3px solid #ffd166; padding-left: 1rem; color: #8b94ab; font-style: italic; margin: 1rem 0; }
+  .prose-lumen a { color: #7dd3fc; text-decoration: underline; text-decoration-color: #334155; text-underline-offset: 3px; }
+  .prose-lumen a:hover { text-decoration-color: #7dd3fc; }
+
+  /* Subtle grid background */
+  .grid-bg {
+    background-image:
+      radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Graph container */
+  #graph-svg { width: 100%; height: 100%; cursor: grab; }
+  #graph-svg:active { cursor: grabbing; }
+  .node-circle { transition: stroke-width 0.15s ease, r 0.15s ease; cursor: pointer; }
+  .node-label { pointer-events: none; user-select: none; font-family: 'Inter'; font-weight: 500; }
+  .link-line { stroke: #333a4d; stroke-opacity: 0.5; transition: stroke 0.2s ease, stroke-opacity 0.2s ease; }
+  .link-line.highlight { stroke: #ffd166; stroke-opacity: 0.9; }
+  .node-dim { opacity: 0.2; }
+
+  /* Thin scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #232836; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #333a4d; }
+
+  /* Soft pulse for hero dot */
+  @keyframes softpulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .pulse-dot { animation: softpulse 2.6s ease-in-out infinite; }
+
+  /* Tag chip */
+  .tag-chip {
+    font-size: 0.7rem; font-weight: 500; letter-spacing: 0.01em;
+    padding: 0.2rem 0.55rem; border-radius: 9999px;
+    background: #181c26; color: #8b94ab; border: 1px solid #232836;
+  }
+  .tag-chip.active { background: rgba(255, 209, 102, 0.12); color: #ffd166; border-color: rgba(255, 209, 102, 0.35); }
+
+  .fade-in { animation: fadein 0.35s ease both; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .btn-primary {
+    background: #ffd166; color: #0b0d12;
+    padding: 0.55rem 1rem; border-radius: 0.55rem; font-weight: 600; font-size: 0.875rem;
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .btn-primary:hover { background: #ffe29a; transform: translateY(-1px); }
+  .btn-ghost {
+    background: transparent; color: #c5cbda;
+    padding: 0.5rem 0.85rem; border-radius: 0.55rem; font-size: 0.875rem; font-weight: 500;
+    border: 1px solid #232836;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .btn-ghost:hover { background: #11141b; color: #e7eaf2; }
+
+  /* Active tab */
+  .tab-active { background: #181c26; color: #e7eaf2; }
+
+  /* Note list item */
+  .note-item:hover { background: #11141b; }
+  .note-item.selected { background: #181c26; border-left-color: #ffd166; }
+
+  /* Modal backdrop */
+  .backdrop { background: rgba(7, 8, 11, 0.75); backdrop-filter: blur(4px); }
+
+  /* Subtle gradient border for emphasis */
+  .grad-border {
+    position: relative;
+  }
+  .grad-border::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+    background: linear-gradient(140deg, rgba(255,209,102,0.4), rgba(125,211,252,0.15) 60%, transparent);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Hero floating nodes animation */
+  @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(8px,-6px); } }
+  @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-6px,8px); } }
+  @keyframes float3 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(4px,10px); } }
+  .float1 { animation: float1 5s ease-in-out infinite; }
+  .float2 { animation: float2 6.2s ease-in-out infinite; }
+  .float3 { animation: float3 4.8s ease-in-out infinite; }
+</style>
+</head>
+
+<body class="min-h-screen bg-ink-950">
+
+<!-- =============== HERO =============== -->
+<section class="relative overflow-hidden grid-bg">
+  <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse at 20% 0%, rgba(255,209,102,0.10), transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(125,211,252,0.08), transparent 55%);"></div>
+
+  <nav class="relative max-w-7xl mx-auto px-6 py-5 flex items-center justify-between z-10">
+    <div class="flex items-center gap-2">
+      <div class="relative">
+        <div class="w-7 h-7 rounded-full bg-accent-500 pulse-dot"></div>
+        <div class="absolute inset-0 w-7 h-7 rounded-full bg-accent-500 opacity-30 blur-md"></div>
+      </div>
+      <span class="font-bold text-lg tracking-tight">Lumen</span>
+      <span class="text-ink-400 text-xs ml-1 font-mono">v0.1</span>
+    </div>
+    <div class="hidden md:flex items-center gap-6 text-sm text-ink-300">
+      <a href="#app" class="hover:text-ink-100 transition">Try it</a>
+      <a href="#how" class="hover:text-ink-100 transition">How it works</a>
+      <a href="#roadmap" class="hover:text-ink-100 transition">Roadmap</a>
+      <a href="https://github.com/" target="_blank" class="hover:text-ink-100 transition">GitHub</a>
+    </div>
+    <a href="#app" class="btn-primary">Open the app</a>
+  </nav>
+
+  <div class="relative max-w-7xl mx-auto px-6 pt-16 pb-24 md:pt-24 md:pb-32 z-10">
+    <div class="max-w-3xl">
+      <div class="inline-flex items-center gap-2 text-xs font-medium tracking-wider uppercase text-ink-300 mb-6 border border-ink-600 rounded-full px-3 py-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
+        Local-first · Private by default · Free
+      </div>
+      <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.02] mb-6">
+        Your notes,<br/>
+        <span class="bg-gradient-to-r from-accent-500 via-accent-400 to-pulse-500 bg-clip-text text-transparent">smarter.</span>
+      </h1>
+      <p class="text-lg md:text-xl text-ink-200 leading-relaxed mb-8 max-w-2xl">
+        A second brain that never leaves your browser. Drop notes in. Watch them connect. Ask questions across everything you've ever written.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a href="#app" class="btn-primary">Explore the demo →</a>
+        <a href="#how" class="btn-ghost">How it works</a>
+      </div>
+      <p class="text-xs text-ink-400 mt-6 font-mono">
+        Everything you see below runs entirely in your browser. No account. No server. No data collected.
+      </p>
+    </div>
+
+    <!-- floating decorative graph -->
+    <div class="hidden lg:block absolute right-8 top-24 w-[420px] h-[380px] opacity-90 pointer-events-none">
+      <svg viewBox="0 0 420 380" class="w-full h-full">
+        <defs>
+          <radialGradient id="nodeGrad" cx="0.5" cy="0.5" r="0.6">
+            <stop offset="0%" stop-color="#ffe29a" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#ffd166" stop-opacity="0.2"/>
+          </radialGradient>
+        </defs>
+        <g stroke="#333a4d" stroke-opacity="0.5">
+          <line x1="90" y1="90" x2="210" y2="180" />
+          <line x1="210" y1="180" x2="340" y2="110" />
+          <line x1="210" y1="180" x2="150" y2="300" />
+          <line x1="210" y1="180" x2="320" y2="280" />
+          <line x1="150" y1="300" x2="320" y2="280" />
+          <line x1="90" y1="90" x2="150" y2="300" />
+          <line x1="340" y1="110" x2="320" y2="280" />
+        </g>
+        <g>
+          <circle class="float1" cx="90" cy="90" r="14" fill="url(#nodeGrad)" stroke="#ffd166" stroke-width="1.5"/>
+          <circle class="float2" cx="340" cy="110" r="10" fill="#7dd3fc" fill-opacity="0.25" stroke="#7dd3fc" stroke-width="1.2"/>
+          <circle class="float3" cx="150" cy="300" r="11" fill="#c4b5fd" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.2"/>
+          <circle class="float1" cx="320" cy="280" r="9" fill="#f0abfc" fill-opacity="0.2" stroke="#f0abfc" stroke-width="1.2"/>
+          <circle class="float2" cx="210" cy="180" r="18" fill="url(#nodeGrad)" stroke="#ffd166" stroke-width="2"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Feature triad -->
+  <div id="how" class="relative max-w-7xl mx-auto px-6 pb-24 grid md:grid-cols-3 gap-4 z-10">
+    <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
+      <div class="text-accent-500 text-xs font-mono tracking-widest mb-3">01 · VISUAL</div>
+      <h3 class="text-xl font-semibold mb-2">A map of your thinking</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Every note becomes a node. Shared ideas form edges. The longer you use Lumen, the more connected your knowledge becomes — visibly.</p>
+    </div>
+    <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
+      <div class="text-pulse-500 text-xs font-mono tracking-widest mb-3">02 · PRIVATE</div>
+      <h3 class="text-xl font-semibold mb-2">Nothing leaves your browser</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Notes live in your browser's storage. No server, no sync, no tracking. Your second brain stays yours — truly yours.</p>
+    </div>
+    <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
+      <div class="text-accent-500 text-xs font-mono tracking-widest mb-3">03 · INSTANT</div>
+      <h3 class="text-xl font-semibold mb-2">No install. No account.</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Open the tab and start writing. Export anytime. Works offline after first load. Free forever.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =============== APP =============== -->
+<section id="app" class="relative max-w-7xl mx-auto px-6 pb-8">
+  <div class="flex items-end justify-between mb-6">
+    <div>
+      <div class="text-xs font-mono tracking-widest text-accent-500 mb-2">LIVE DEMO</div>
+      <h2 class="text-3xl md:text-4xl font-bold tracking-tight">Explore a seeded workspace</h2>
+      <p class="text-ink-300 mt-2 max-w-2xl">Pre-loaded with 12 notes on <em class="text-pulse-500 not-italic">how to learn effectively</em>. Click any node. Add your own. Everything stays in your browser.</p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-ink-600 bg-ink-900 overflow-hidden shadow-2xl grad-border">
+
+    <!-- App top bar -->
+    <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-ink-700 bg-ink-800/50">
+      <div class="flex items-center bg-ink-900 border border-ink-700 rounded-lg p-1">
+        <button id="tab-graph" class="px-3 py-1.5 rounded-md text-sm font-medium tab-active">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="7.5" y1="7.5" x2="10" y2="16"/><line x1="16.5" y1="7.5" x2="14" y2="16"/></svg>
+            Graph
+          </span>
+        </button>
+        <button id="tab-notes" class="px-3 py-1.5 rounded-md text-sm font-medium text-ink-300">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+            Notes
+          </span>
+        </button>
+      </div>
+
+      <div class="relative flex-1 min-w-[180px] max-w-md">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search-input" type="text" placeholder="Search your notes…"
+          class="w-full bg-ink-900 border border-ink-700 rounded-lg pl-9 pr-3 py-2 text-sm text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30" />
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <button id="btn-export" class="btn-ghost text-xs" title="Export all notes as JSON">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </span>
+        </button>
+        <button id="btn-add" class="btn-primary text-xs">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New note
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- App content (two modes: graph and notes) -->
+    <div class="relative" style="height: min(72vh, 720px);">
+
+      <!-- GRAPH MODE -->
+      <div id="view-graph" class="absolute inset-0">
+        <div class="absolute top-4 left-4 z-10 pointer-events-none">
+          <div class="text-xs font-mono text-ink-400 tracking-wider uppercase">How to learn effectively</div>
+          <div class="text-sm text-ink-300 mt-1"><span id="graph-stats">—</span></div>
+        </div>
+        <div class="absolute top-4 right-4 z-10 text-xs text-ink-400 pointer-events-none">
+          drag · scroll · click
+        </div>
+        <svg id="graph-svg"></svg>
+        <!-- Hover preview card -->
+        <div id="hover-card" class="absolute hidden z-20 max-w-xs p-3 rounded-lg border border-ink-600 bg-ink-800 shadow-xl pointer-events-none fade-in">
+          <div id="hover-title" class="text-sm font-semibold text-ink-100 mb-1"></div>
+          <div id="hover-tags" class="flex flex-wrap gap-1"></div>
+          <div id="hover-snippet" class="text-xs text-ink-300 mt-2 leading-relaxed"></div>
+        </div>
+      </div>
+
+      <!-- NOTES MODE -->
+      <div id="view-notes" class="absolute inset-0 hidden grid grid-cols-12">
+        <!-- Note list -->
+        <aside class="col-span-12 md:col-span-3 border-r border-ink-700 overflow-y-auto bg-ink-900">
+          <div id="note-list" class="py-2"></div>
+        </aside>
+
+        <!-- Viewer -->
+        <main class="col-span-12 md:col-span-6 overflow-y-auto px-6 md:px-10 py-8 bg-ink-950">
+          <div id="note-viewer" class="prose-lumen max-w-2xl fade-in"></div>
+        </main>
+
+        <!-- Connections panel -->
+        <aside class="col-span-12 md:col-span-3 border-l border-ink-700 overflow-y-auto p-4 bg-ink-900">
+          <div class="text-xs font-mono tracking-widest text-ink-400 uppercase mb-3">Connections</div>
+          <div id="connections-list" class="space-y-2"></div>
+
+          <div class="mt-8">
+            <div class="text-xs font-mono tracking-widest text-ink-400 uppercase mb-3">Tags</div>
+            <div id="note-tags" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <div class="mt-8 rounded-lg border border-ink-700 bg-ink-800/50 p-3">
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-pulse-500"></span>
+              <div class="text-xs font-medium text-ink-200">Ask your notes</div>
+            </div>
+            <div class="text-[11px] text-ink-400 leading-relaxed">Coming soon: ask a question and get a cited answer synthesized from your entire workspace.</div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- App footer hint -->
+  <div class="mt-4 flex items-center gap-2 text-xs text-ink-400">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.5" fill="currentColor"/></svg>
+    Notes you add are saved only in this browser. Clear site data to remove them.
+  </div>
+</section>
+
+<!-- =============== ROADMAP =============== -->
+<section id="roadmap" class="max-w-7xl mx-auto px-6 py-24">
+  <div class="max-w-3xl">
+    <div class="text-xs font-mono tracking-widest text-accent-500 mb-2">ROADMAP</div>
+    <h2 class="text-3xl md:text-4xl font-bold tracking-tight mb-4">Where Lumen is going</h2>
+    <p class="text-ink-300 mb-10">This demo is the seed. Here's the shape of the full product.</p>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-2 h-2 rounded-full bg-accent-500"></span>
+        <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.1</div>
+      </div>
+      <h3 class="text-lg font-semibold mb-2">Interactive knowledge graph</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Tag-based auto-linking, force-directed layout, zoom/pan, click-to-open, and a polished notes viewer. Add your own notes — they persist in your browser.</p>
+    </div>
+
+    <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
+        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.2</div>
+      </div>
+      <h3 class="text-lg font-semibold mb-2">In-browser semantic search</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Real embeddings running entirely in the browser (transformers.js + MiniLM). Connections become semantic, not just tag-based. No data leaves your machine.</p>
+    </div>
+
+    <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-2 h-2 rounded-full bg-ink-400"></span>
+        <div class="text-xs font-mono tracking-wider text-ink-300">LATER · v0.3</div>
+      </div>
+      <h3 class="text-lg font-semibold mb-2">Ask your notes</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Type a question. Lumen finds the most relevant chunks, shows you exactly what it will send, and returns a cited answer via an LLM of your choice.</p>
+    </div>
+
+    <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-2 h-2 rounded-full bg-ink-400"></span>
+        <div class="text-xs font-mono tracking-wider text-ink-300">LATER · v0.4</div>
+      </div>
+      <h3 class="text-lg font-semibold mb-2">Ingest anything</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF, paste a URL, or connect a folder. Lumen extracts, summarizes, and weaves the new knowledge into your graph.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =============== FOOTER =============== -->
+<footer class="border-t border-ink-800 py-8 mt-16">
+  <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-ink-400">
+    <div class="flex items-center gap-2">
+      <div class="w-4 h-4 rounded-full bg-accent-500"></div>
+      <span>Lumen · built as a portfolio project</span>
+    </div>
+    <div class="flex items-center gap-4 text-xs font-mono">
+      <span>v0.1</span>
+      <span>·</span>
+      <span>zero servers</span>
+      <span>·</span>
+      <span>zero tracking</span>
+    </div>
+  </div>
+</footer>
+
+<!-- =============== ADD NOTE MODAL =============== -->
+<div id="modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
+  <div class="w-full max-w-2xl rounded-2xl border border-ink-600 bg-ink-900 shadow-2xl fade-in">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-ink-700">
+      <div>
+        <div class="text-xs font-mono text-accent-500 tracking-widest">NEW NOTE</div>
+        <div class="text-sm text-ink-300 mt-0.5">Saved only in your browser</div>
+      </div>
+      <button id="modal-close" class="text-ink-400 hover:text-ink-100 text-xl leading-none">×</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <input id="note-title-input" type="text" placeholder="Title…"
+        class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2.5 text-base font-semibold text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30" />
+      <input id="note-tags-input" type="text" placeholder="tags, comma separated (e.g. memory, study-technique)"
+        class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-sm text-ink-200 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 font-mono" />
+      <textarea id="note-content-input" placeholder="Write in markdown. Use # headings, **bold**, *italic*, - bullets…"
+        class="w-full h-56 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 font-mono resize-none"></textarea>
+      <div class="text-xs text-ink-400">
+        Tip: add tags that overlap with existing notes (click a tag chip below) so your new note joins the graph.
+      </div>
+      <div id="modal-tag-suggest" class="flex flex-wrap gap-1.5"></div>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-ink-700">
+      <button id="modal-cancel" class="btn-ghost text-xs">Cancel</button>
+      <button id="modal-save" class="btn-primary text-xs">Save to my brain</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================
+   LUMEN — single-file application
+   ========================================= */
+
+// ---------- Seeded notes ----------
+const SEED_NOTES = [
+  {
+    id: 'n01',
+    title: 'Active recall beats re-reading',
+    tags: ['memory', 'study-technique', 'evidence-based'],
+    content: `# Active recall beats re-reading
+
+Re-reading *feels* productive because the words get more familiar each pass. But familiarity is not the same as memory. When you close the book and ask yourself "what were the three arguments in that chapter?" — that's when learning actually happens.
+
+## The mechanism
+
+Every retrieval **strengthens the memory trace**. It's why a flashcard you get wrong, then get right, sticks longer than one you merely stared at for ten minutes.
+
+## What this looks like in practice
+
+- Close the textbook and write down what you remember, *then* check
+- Turn every heading into a question before reading the section
+- After a lecture, summarize it to a rubber duck (or a human) from memory
+
+> The single highest-leverage study habit change most people never make.
+
+Pairs with: **spaced repetition**, **the illusion of competence**.`
+  },
+  {
+    id: 'n02',
+    title: 'Spaced repetition: forgetting is the point',
+    tags: ['memory', 'study-technique', 'long-term', 'evidence-based'],
+    content: `# Spaced repetition: forgetting is the point
+
+The forgetting curve is not a bug, it's the feature. Each time you're *about to forget* something and you retrieve it just in time, the curve flattens.
+
+## Intervals that work
+
+Rather than memorize a schedule, use a tool that does the math (Anki, RemNote, Mochi). But the shape is roughly:
+
+- Day 1 → Day 2 → Day 4 → Day 9 → Day 20 → Day 45 → …
+
+## Why it's so uncomfortable
+
+It deliberately puts you at the edge of forgetting. That discomfort is *learning doing work*. Most people quit because it feels harder than re-reading — which is exactly why it works.
+
+Pairs with: **active recall**, **why we forget**.`
+  },
+  {
+    id: 'n03',
+    title: 'The Feynman Technique',
+    tags: ['teaching', 'understanding', 'communication'],
+    content: `# The Feynman Technique
+
+Pick a concept. Explain it, in plain language, as if teaching a curious 12-year-old. When you get stuck — that stuck point is your real gap in understanding. Go back, fill it in, try again.
+
+## The four steps
+
+1. Choose a concept you think you understand.
+2. Write an explanation using simple words. No jargon to hide behind.
+3. Identify the cracks: where did you fudge, hand-wave, fall back on a term you can't unpack?
+4. Go back to the source, close the gaps, and retry.
+
+## Why it works
+
+Jargon is a *debt you owe* your understanding. Plain language forces you to pay it. If you can't explain it simply, you don't understand it yet — and now you know *where*.
+
+Pairs with: **learning in public**, **mental models**.`
+  },
+  {
+    id: 'n04',
+    title: 'Deliberate practice, not just practice',
+    tags: ['skill-building', 'mastery', 'focus'],
+    content: `# Deliberate practice, not just practice
+
+10,000 hours is a myth as commonly told. It's not *hours* — it's *hours of the right kind*. Driving for 40 years does not make you a world-class driver. Typing for decades does not make you a typist.
+
+## The ingredients
+
+- A specific, just-beyond-reach goal
+- Immediate, honest feedback
+- Full attention (no multitasking)
+- Deliberate repetition of the hard parts — not the comfortable ones
+
+## The discomfort test
+
+If practice feels good the whole time, you're probably not growing. Deliberate practice sits in the **productive discomfort zone**: hard enough that you fail often, easy enough that you don't drown.
+
+Pairs with: **curiosity-driven learning**, **interleaving**.`
+  },
+  {
+    id: 'n05',
+    title: 'Interleaving vs. blocking',
+    tags: ['study-technique', 'mastery', 'evidence-based'],
+    content: `# Interleaving vs. blocking
+
+**Blocking** = drill problem type A for an hour, then B, then C. Feels smooth. Scores poorly on a mixed test.
+
+**Interleaving** = alternate A, B, C, A, C, B… Feels awful. Scores higher on a mixed test *and* in the real world, where problems arrive out of order.
+
+## Why the discomfort
+
+When you block, your brain loads up a pattern and keeps reusing it without re-deciding. Interleaving forces you to *identify which tool to use* every time — which is the actual skill needed when problems show up in the wild.
+
+## One concrete example
+
+Math students solve mixed problem sets covering several chapters. Harder day-to-day. Much better exam performance. Much better transfer months later.
+
+Pairs with: **deliberate practice**, **the illusion of competence**.`
+  },
+  {
+    id: 'n06',
+    title: 'Mental models as retrieval scaffolds',
+    tags: ['thinking', 'understanding', 'problem-solving'],
+    content: `# Mental models as retrieval scaffolds
+
+Facts are slippery. Models are sticky. A single well-structured model lets you regenerate a hundred facts on demand.
+
+## Examples that earn their keep
+
+- **Supply and demand** — explains pricing, queues, dating markets, housing
+- **Compounding** — explains money, skill, reputation, atrophy
+- **Incentives** — "show me the incentive, I'll show you the outcome"
+- **Second-order effects** — what happens *after* the obvious thing happens?
+
+## Collecting models
+
+Treat them like tools. When you notice yourself reaching for the same explanation in three different domains, you've found one worth keeping.
+
+Pairs with: **the Feynman technique**, **curiosity-driven learning**.`
+  },
+  {
+    id: 'n07',
+    title: 'Why we forget (and why that\'s fine)',
+    tags: ['memory', 'cognitive-science', 'long-term'],
+    content: `# Why we forget (and why that's fine)
+
+Forgetting is not a system failure. It's a system working as designed — filtering out signal from noise.
+
+## What we know
+
+Hermann Ebbinghaus in 1885 mapped the **forgetting curve**: most of what you learn today is gone in 24 hours unless you revisit it. Nothing about that has changed.
+
+## The twist
+
+Forgetting *is what makes remembering possible*. If every impression stuck, recall would be flooded and useless. Your brain is a filter, not a hard drive — and filters throw things away on purpose.
+
+## Implication
+
+Don't fight the forgetting. Work *with* it via spacing, retrieval, and connection.
+
+Pairs with: **spaced repetition**, **sleep and memory**.`
+  },
+  {
+    id: 'n08',
+    title: 'Curiosity-driven learning compounds',
+    tags: ['motivation', 'thinking', 'intrinsic'],
+    content: `# Curiosity-driven learning compounds
+
+Learning things you have to learn is expensive. Learning things you *want* to learn is almost free. Curiosity is the cheapest form of attention there is.
+
+## The multiplier
+
+When you're curious:
+- You remember more (emotional salience helps encoding)
+- You study longer without fatigue
+- You spontaneously make connections across fields
+- You're willing to sit with confusion instead of bailing
+
+## How to cultivate it
+
+- Follow threads — when something surprises you, *stop and chase it*
+- Read widely, not just deeply. Odd domains produce the best analogies.
+- Keep a "questions I'd love to answer" list. Bring curiosity to your study, don't expect study to hand you curiosity.
+
+Pairs with: **mental models**, **deliberate practice**.`
+  },
+  {
+    id: 'n09',
+    title: 'Sleep and memory consolidation',
+    tags: ['memory', 'long-term', 'cognitive-science'],
+    content: `# Sleep and memory consolidation
+
+Sleep is when the day's learning is *filed*. Cut sleep and you're studying with a bucket that has a hole.
+
+## What happens overnight
+
+- During slow-wave sleep, the hippocampus replays the day's experiences, and those replays move memories into neocortical long-term storage
+- REM sleep appears to link new memories to existing ones — the "sleep on it, you'll see it differently tomorrow" effect is literal
+
+## The math no one likes
+
+Pulling an all-nighter before an exam often scores *worse* than sleeping, even though you spent more hours studying. The brain you bring to the exam with 4 hours of sleep is not the same instrument.
+
+Pairs with: **why we forget**, **spaced repetition**.`
+  },
+  {
+    id: 'n10',
+    title: 'Reading with a pen',
+    tags: ['reading', 'retention', 'note-taking'],
+    content: `# Reading with a pen
+
+Reading with a pen is 3× slower and 10× more productive. Passive reading is entertainment; active reading is learning.
+
+## The minimum ritual
+
+- Underline exactly *one* sentence per page — the most important one
+- In the margin, write **why** in three words
+- At chapter end, close the book and write one paragraph from memory
+
+## The test
+
+A week after finishing a book, can you explain its three main arguments to a friend? If not, you were entertained, not taught.
+
+Pairs with: **active recall**, **the Feynman technique**.`
+  },
+  {
+    id: 'n11',
+    title: 'The illusion of competence',
+    tags: ['evidence-based', 'study-technique', 'metacognition'],
+    content: `# The illusion of competence
+
+You highlighted the whole page. You re-read the notes three times. You *feel* ready. Then the test arrives and it all evaporates.
+
+## The bug in your metacognition
+
+When information is *familiar*, the brain confuses that for *retrievable*. These are different things. Familiarity is a sense; retrieval is a capacity.
+
+## How to tell the difference
+
+- Can you explain it, out loud, in plain words, right now? Then you know it.
+- If you can only nod along when you re-read? You don't.
+
+## The fix
+
+Practice-test yourself early and often. Shift your judgment of readiness from "does this feel familiar?" to "could I reproduce it cold?"
+
+Pairs with: **active recall**, **interleaving**.`
+  },
+  {
+    id: 'n12',
+    title: 'Learning in public',
+    tags: ['teaching', 'motivation', 'communication'],
+    content: `# Learning in public
+
+The fastest way to learn a field is to commit to explaining it to others *while you're still learning it.* The fear of being wrong in public sharpens everything.
+
+## Why it works
+
+- **Retrieval:** writing / teaching is active recall, disguised as a hobby
+- **Clarity:** an audience (real or imagined) forces simple language (see: the Feynman technique)
+- **Feedback:** the Internet will correct you faster than any textbook will
+- **Accountability:** next week you owe the world another post — so this week you actually study
+
+## The bar
+
+You don't need to be an expert to share. You need to be honestly ahead of your reader by one week. A beginner explaining week-2 ideas well is far more useful to week-1 learners than an expert explaining week-30 ideas over their heads.
+
+Pairs with: **the Feynman technique**, **curiosity-driven learning**.`
+  },
+];
+
+// ---------- State ----------
+const LS_KEY = 'lumen.userNotes.v1';
+function loadUserNotes() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+function saveUserNotes(notes) { localStorage.setItem(LS_KEY, JSON.stringify(notes)); }
+
+let state = {
+  notes: [],                // full merged list
+  filteredIds: null,        // array of ids, or null if no search
+  selectedId: null,
+  mode: 'graph',            // 'graph' | 'notes'
+  fuse: null,
+};
+
+function allTags() {
+  const s = new Set();
+  state.notes.forEach(n => (n.tags || []).forEach(t => s.add(t)));
+  return Array.from(s).sort();
+}
+
+function rebuild() {
+  state.notes = [...SEED_NOTES, ...loadUserNotes()];
+  state.fuse = new Fuse(state.notes, {
+    keys: ['title', 'content', 'tags'],
+    threshold: 0.35,
+    ignoreLocation: true,
+  });
+}
+
+// ---------- Graph edges from tags ----------
+function buildEdges(nodes) {
+  const edges = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = new Set(nodes[i].tags || []);
+      const shared = (nodes[j].tags || []).filter(t => a.has(t));
+      if (shared.length > 0) {
+        edges.push({ source: nodes[i].id, target: nodes[j].id, weight: shared.length, shared });
+      }
+    }
+  }
+  return edges;
+}
+
+// ---------- Tag → color ----------
+const PALETTE = ['#ffd166', '#7dd3fc', '#c4b5fd', '#f0abfc', '#86efac', '#fdba74', '#fca5a5', '#a5b4fc'];
+const tagColorCache = new Map();
+function tagColor(tag) {
+  if (!tagColorCache.has(tag)) {
+    let h = 0; for (const ch of tag) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    tagColorCache.set(tag, PALETTE[Math.abs(h) % PALETTE.length]);
+  }
+  return tagColorCache.get(tag);
+}
+function nodeColor(note) {
+  const t = (note.tags || [])[0];
+  return t ? tagColor(t) : '#ffd166';
+}
+
+// ---------- Renderers ----------
+function renderNoteList() {
+  const el = document.getElementById('note-list');
+  const visible = state.filteredIds
+    ? state.notes.filter(n => state.filteredIds.includes(n.id))
+    : state.notes;
+
+  if (visible.length === 0) {
+    el.innerHTML = `<div class="p-6 text-sm text-ink-400">No notes match. Try a different search.</div>`;
+    return;
+  }
+
+  el.innerHTML = visible.map(n => {
+    const isSel = n.id === state.selectedId;
+    const firstLine = n.content.replace(/^#+\s.*$/m, '').replace(/\n/g, ' ').trim().slice(0, 90);
+    return `
+      <button class="note-item w-full text-left px-4 py-3 border-l-2 border-transparent transition ${isSel ? 'selected' : ''}" data-id="${n.id}">
+        <div class="text-sm font-medium text-ink-100 leading-tight">${escapeHtml(n.title)}</div>
+        <div class="text-xs text-ink-400 mt-1 line-clamp-2 leading-snug">${escapeHtml(firstLine)}</div>
+        <div class="flex flex-wrap gap-1 mt-2">
+          ${(n.tags || []).slice(0, 3).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  el.querySelectorAll('.note-item').forEach(b => {
+    b.addEventListener('click', () => selectNote(b.dataset.id));
+  });
+}
+
+function renderNoteViewer() {
+  const viewer = document.getElementById('note-viewer');
+  const note = state.notes.find(n => n.id === state.selectedId);
+  if (!note) {
+    viewer.innerHTML = `<div class="text-ink-400 text-sm">Select a note to read it.</div>`;
+    return;
+  }
+  viewer.innerHTML = marked.parse(note.content);
+  renderConnections(note);
+}
+
+function renderConnections(note) {
+  const list = document.getElementById('connections-list');
+  const tags = document.getElementById('note-tags');
+
+  // related: share at least one tag, sort by overlap
+  const myTags = new Set(note.tags || []);
+  const related = state.notes
+    .filter(n => n.id !== note.id)
+    .map(n => ({ n, shared: (n.tags || []).filter(t => myTags.has(t)) }))
+    .filter(x => x.shared.length > 0)
+    .sort((a, b) => b.shared.length - a.shared.length)
+    .slice(0, 6);
+
+  if (related.length === 0) {
+    list.innerHTML = `<div class="text-xs text-ink-400">No connections yet. Add tags that overlap with other notes.</div>`;
+  } else {
+    list.innerHTML = related.map(({ n, shared }) => `
+      <button class="w-full text-left p-2.5 rounded-lg border border-ink-700 bg-ink-800/50 hover:bg-ink-800 hover:border-ink-500 transition group" data-id="${n.id}">
+        <div class="text-xs font-medium text-ink-100 leading-tight group-hover:text-accent-400">${escapeHtml(n.title)}</div>
+        <div class="flex flex-wrap gap-1 mt-1.5">
+          ${shared.map(t => `<span class="tag-chip active">${escapeHtml(t)}</span>`).join('')}
+        </div>
+      </button>
+    `).join('');
+    list.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => selectNote(b.dataset.id));
+    });
+  }
+
+  tags.innerHTML = (note.tags || []).map(t => {
+    const color = tagColor(t);
+    return `<span class="tag-chip" style="border-color:${color}40; color:${color};">${escapeHtml(t)}</span>`;
+  }).join('');
+}
+
+function selectNote(id) {
+  state.selectedId = id;
+  setMode('notes');
+  renderNoteList();
+  renderNoteViewer();
+  document.getElementById('note-viewer').scrollTop = 0;
+}
+
+// ---------- Graph ----------
+let graphSim = null;
+let graphRendered = false;
+function renderGraph() {
+  const svgEl = document.getElementById('graph-svg');
+  const svg = d3.select(svgEl);
+  svg.selectAll('*').remove();
+
+  const rect = svgEl.getBoundingClientRect();
+  const width = rect.width, height = rect.height;
+
+  const nodes = state.notes.map(n => ({ ...n }));
+  const edges = buildEdges(nodes);
+  document.getElementById('graph-stats').textContent =
+    `${nodes.length} notes · ${edges.length} connections`;
+
+  const g = svg.append('g');
+
+  // zoom
+  svg.call(d3.zoom().scaleExtent([0.3, 3]).on('zoom', e => g.attr('transform', e.transform)));
+
+  const link = g.append('g').selectAll('line')
+    .data(edges).enter().append('line')
+    .attr('class', 'link-line')
+    .attr('stroke-width', d => Math.min(1 + d.weight * 0.6, 3.5));
+
+  const node = g.append('g').selectAll('g')
+    .data(nodes).enter().append('g')
+    .attr('class', 'node-group')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) graphSim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) graphSim.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  node.append('circle')
+    .attr('class', 'node-circle')
+    .attr('r', d => 7 + Math.min((d.tags || []).length * 1.2, 6))
+    .attr('fill', d => nodeColor(d))
+    .attr('fill-opacity', 0.25)
+    .attr('stroke', d => nodeColor(d))
+    .attr('stroke-width', 2);
+
+  node.append('text')
+    .attr('class', 'node-label')
+    .attr('x', d => 11 + Math.min((d.tags || []).length * 1.2, 6))
+    .attr('y', 4)
+    .attr('font-size', 11)
+    .attr('fill', '#c5cbda')
+    .text(d => truncate(d.title, 32));
+
+  // hover + click
+  const hoverCard = document.getElementById('hover-card');
+  node
+    .on('mouseenter', function (event, d) {
+      d3.select(this).select('circle').attr('stroke-width', 3.5).attr('fill-opacity', 0.45);
+      // highlight connected edges
+      link.classed('highlight', l => l.source.id === d.id || l.target.id === d.id);
+      const connectedIds = new Set();
+      edges.forEach(e => {
+        if (e.source.id === d.id) connectedIds.add(e.target.id);
+        if (e.target.id === d.id) connectedIds.add(e.source.id);
+      });
+      node.classed('node-dim', nd => nd.id !== d.id && !connectedIds.has(nd.id));
+
+      // hover card
+      document.getElementById('hover-title').textContent = d.title;
+      document.getElementById('hover-tags').innerHTML = (d.tags || [])
+        .map(t => `<span class="tag-chip" style="border-color:${tagColor(t)}40; color:${tagColor(t)};">${escapeHtml(t)}</span>`).join('');
+      const snippet = d.content.replace(/^#.*$/m, '').replace(/[*_`#>\-]/g, '').trim().slice(0, 140);
+      document.getElementById('hover-snippet').textContent = snippet + '…';
+      hoverCard.classList.remove('hidden');
+      const [mx, my] = d3.pointer(event, svgEl);
+      const cardW = 280;
+      hoverCard.style.left = Math.min(mx + 16, rect.width - cardW) + 'px';
+      hoverCard.style.top = (my + 16) + 'px';
+    })
+    .on('mousemove', function (event) {
+      const [mx, my] = d3.pointer(event, svgEl);
+      const cardW = 280;
+      hoverCard.style.left = Math.min(mx + 16, rect.width - cardW) + 'px';
+      hoverCard.style.top = (my + 16) + 'px';
+    })
+    .on('mouseleave', function () {
+      d3.select(this).select('circle').attr('stroke-width', 2).attr('fill-opacity', 0.25);
+      link.classed('highlight', false);
+      node.classed('node-dim', false);
+      hoverCard.classList.add('hidden');
+    })
+    .on('click', (_, d) => selectNote(d.id));
+
+  graphSim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(110).strength(0.6))
+    .force('charge', d3.forceManyBody().strength(-280))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide().radius(34))
+    .on('tick', () => {
+      link
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+  graphRendered = true;
+}
+
+// ---------- Mode switching ----------
+function setMode(m) {
+  state.mode = m;
+  const gTab = document.getElementById('tab-graph');
+  const nTab = document.getElementById('tab-notes');
+  const gView = document.getElementById('view-graph');
+  const nView = document.getElementById('view-notes');
+  if (m === 'graph') {
+    gTab.classList.add('tab-active'); gTab.classList.remove('text-ink-300');
+    nTab.classList.remove('tab-active'); nTab.classList.add('text-ink-300');
+    gView.classList.remove('hidden'); nView.classList.add('hidden');
+    if (!graphRendered) renderGraph();
+  } else {
+    nTab.classList.add('tab-active'); nTab.classList.remove('text-ink-300');
+    gTab.classList.remove('tab-active'); gTab.classList.add('text-ink-300');
+    nView.classList.remove('hidden'); gView.classList.add('hidden');
+    nView.classList.add('grid'); // ensure grid
+    if (!state.selectedId) state.selectedId = state.notes[0]?.id;
+    renderNoteList();
+    renderNoteViewer();
+  }
+}
+
+// ---------- Search ----------
+function onSearch(q) {
+  if (!q.trim()) {
+    state.filteredIds = null;
+  } else {
+    const res = state.fuse.search(q).map(r => r.item.id);
+    state.filteredIds = res;
+  }
+  renderNoteList();
+  // also highlight in graph by dimming non-matches
+  if (graphRendered) {
+    const set = state.filteredIds ? new Set(state.filteredIds) : null;
+    d3.select('#graph-svg').selectAll('.node-group')
+      .classed('node-dim', d => set ? !set.has(d.id) : false);
+  }
+}
+
+// ---------- Add note modal ----------
+function openModal() {
+  const m = document.getElementById('modal');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+  document.getElementById('note-title-input').value = '';
+  document.getElementById('note-tags-input').value = '';
+  document.getElementById('note-content-input').value = '';
+  // suggest existing tags
+  const sug = document.getElementById('modal-tag-suggest');
+  sug.innerHTML = allTags().map(t => {
+    const color = tagColor(t);
+    return `<button type="button" class="tag-chip" style="border-color:${color}40; color:${color};" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</button>`;
+  }).join('');
+  sug.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      const input = document.getElementById('note-tags-input');
+      const existing = input.value.split(',').map(s => s.trim()).filter(Boolean);
+      if (!existing.includes(b.dataset.tag)) existing.push(b.dataset.tag);
+      input.value = existing.join(', ');
+    });
+  });
+  setTimeout(() => document.getElementById('note-title-input').focus(), 50);
+}
+function closeModal() {
+  const m = document.getElementById('modal');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+function saveNewNote() {
+  const title = document.getElementById('note-title-input').value.trim();
+  const tagsRaw = document.getElementById('note-tags-input').value.trim();
+  const content = document.getElementById('note-content-input').value.trim();
+  if (!title || !content) {
+    alert('Title and content required.');
+    return;
+  }
+  const tags = tagsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const id = 'u_' + Date.now().toString(36);
+  const userNotes = loadUserNotes();
+  userNotes.push({ id, title, tags, content });
+  saveUserNotes(userNotes);
+  rebuild();
+  state.selectedId = id;
+  graphRendered = false;
+  closeModal();
+  setMode('graph'); // so user immediately sees their node appear in the graph
+  // optional: briefly show the new node by centering? skipped — the aha is the visible appearance.
+}
+
+// ---------- Export ----------
+function exportAll() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    source: 'lumen-v0.1',
+    seedNotes: SEED_NOTES.length,
+    userNotes: loadUserNotes(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `lumen-export-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+// ---------- Utilities ----------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+// ---------- Wiring ----------
+document.addEventListener('DOMContentLoaded', () => {
+  rebuild();
+  // Initial render
+  setMode('graph');
+
+  document.getElementById('tab-graph').addEventListener('click', () => setMode('graph'));
+  document.getElementById('tab-notes').addEventListener('click', () => setMode('notes'));
+
+  document.getElementById('search-input').addEventListener('input', e => onSearch(e.target.value));
+
+  document.getElementById('btn-add').addEventListener('click', openModal);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', saveNewNote);
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target.id === 'modal') closeModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  document.getElementById('btn-export').addEventListener('click', exportAll);
+
+  // Re-render graph on window resize
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (state.mode !== 'graph') return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      graphRendered = false;
+      renderGraph();
+    }, 250);
+  });
+});
+</script>
+</body>
+</html>

@@ -4,20 +4,24 @@
 
 Lumen is a local-first knowledge graph app. Notes become nodes, shared ideas become edges, and your thinking becomes *visible*. No server, no account, no tracking — everything runs in your browser.
 
-This repo is **v0.1**: a single-file, zero-build web app that demonstrates the core experience on a seeded workspace about *how to learn effectively*.
+This repo is **v0.2**: a single-file, zero-build web app that demonstrates the core experience on a seeded workspace about *how to learn effectively* — with real sentence embeddings running directly in your browser.
 
 ## Live demo
 
 → **[sillanaresh.github.io/lumen](https://sillanaresh.github.io/lumen/)**
 
-## What's in v0.1
+## What's in v0.2
 
 - **Interactive D3 force-directed graph** of 12 hand-written notes on learning science
-- **Tag-based auto-linking** — notes sharing a tag form visible edges
+- **Two edge modes**:
+  - *Tags* — notes sharing a tag form visible edges (instant, no model needed)
+  - *Semantic* — real sentence embeddings (MiniLM-L6-v2) compute meaning-based connections via on-device inference
+- **Semantic search** that blends fuzzy keyword matching with embedding cosine similarity (65/35) when the AI is ready
 - **Polished markdown viewer** with connections panel and tag chips
-- **Fuzzy search** (Fuse.js) across titles, content, and tags
 - **Add your own notes** — persisted in `localStorage`, joining the graph instantly
+- **Embedding cache** — computed vectors are stored in `IndexedDB`, keyed by content hash, so repeat visits are instant
 - **Export** your workspace as JSON at any time
+- Live AI status indicator — loading progress, ready state, errors
 - Dark, typographic, carefully-considered UI
 
 ## Try it locally
@@ -46,13 +50,14 @@ Most "AI notes" apps send your thoughts to someone else's server. Lumen flips th
 | UI | Tailwind (CDN), Inter + JetBrains Mono |
 | Graph | D3.js v7 force-directed |
 | Markdown | Marked.js |
-| Search | Fuse.js fuzzy |
-| Storage | Browser `localStorage` |
+| Search | Fuse.js (fuzzy) + cosine similarity over embeddings (semantic) |
+| AI | transformers.js 2.17 running MiniLM-L6-v2 entirely in the browser |
+| Storage | `localStorage` for notes, `IndexedDB` for embedding cache |
 | Hosting | GitHub Pages — free, static, indefinite |
 
 ## Roadmap
 
-- **v0.2** — In-browser semantic search (transformers.js + MiniLM embeddings). Connections become meaning-based, not just tag-based.
+- **v0.2** ✅ *Shipped* — In-browser semantic search (transformers.js + MiniLM embeddings). Connections are now meaning-based, not just tag-based.
 - **v0.3** — Ask your notes: retrieval-augmented Q&A via OpenRouter, with cited answers and a transparent "what will be sent" preview.
 - **v0.4** — Ingest PDFs and URLs. Drop a paper, get a note with auto-extracted concepts that weave into the graph.
 - **v0.5** — Optional sync via your own Dropbox/iCloud folder. We still store nothing.

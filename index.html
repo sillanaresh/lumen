@@ -15,6 +15,54 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 
+<script type="module">
+  // Transformers.js — runs entirely in the browser.
+  // Model: all-MiniLM-L6-v2 (≈22MB, cached by the browser after first load).
+  import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+  env.allowLocalModels = false;
+  env.useBrowserCache = true;
+
+  const LumenAI = {
+    embedder: null,
+    ready: null,
+    state: 'idle',   // idle | loading | ready | error
+    progress: 0,
+    _emit(detail) { window.dispatchEvent(new CustomEvent('lumen:ai', { detail })); },
+    async init() {
+      if (this.ready) return this.ready;
+      this.state = 'loading';
+      this._emit({ state: this.state, progress: 0 });
+      this.ready = (async () => {
+        try {
+          this.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+            progress_callback: (d) => {
+              if (d && typeof d.progress === 'number') {
+                this.progress = Math.max(this.progress, d.progress);
+                this._emit({ state: this.state, progress: this.progress, file: d.file });
+              }
+            },
+          });
+          this.state = 'ready';
+          this.progress = 100;
+          this._emit({ state: this.state, progress: 100 });
+        } catch (err) {
+          console.error('[Lumen AI]', err);
+          this.state = 'error';
+          this._emit({ state: this.state, error: String(err) });
+          throw err;
+        }
+      })();
+      return this.ready;
+    },
+    async embed(text) {
+      await this.init();
+      const out = await this.embedder(text, { pooling: 'mean', normalize: true });
+      return Array.from(out.data);
+    },
+  };
+  window.LumenAI = LumenAI;
+</script>
+
 <script>
   tailwind.config = {
     theme: {
@@ -173,7 +221,7 @@
         <div class="absolute inset-0 w-7 h-7 rounded-full bg-accent-500 opacity-30 blur-md"></div>
       </div>
       <span class="font-bold text-lg tracking-tight">Lumen</span>
-      <span class="text-ink-400 text-xs ml-1 font-mono">v0.1</span>
+      <span class="text-ink-400 text-xs ml-1 font-mono">v0.2</span>
     </div>
     <div class="hidden md:flex items-center gap-6 text-sm text-ink-300">
       <a href="#app" class="hover:text-ink-100 transition">Try it</a>
@@ -291,6 +339,10 @@
       </div>
 
       <div class="flex items-center gap-2 ml-auto">
+        <div id="ai-pill" class="hidden md:inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full border border-ink-700 bg-ink-900 text-ink-300" title="Local AI model status">
+          <span id="ai-dot" class="w-1.5 h-1.5 rounded-full bg-ink-400"></span>
+          <span id="ai-label">AI idle</span>
+        </div>
         <button id="btn-export" class="btn-ghost text-xs" title="Export all notes as JSON">
           <span class="inline-flex items-center gap-1.5">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -315,8 +367,15 @@
           <div class="text-xs font-mono text-ink-400 tracking-wider uppercase">How to learn effectively</div>
           <div class="text-sm text-ink-300 mt-1"><span id="graph-stats">—</span></div>
         </div>
-        <div class="absolute top-4 right-4 z-10 text-xs text-ink-400 pointer-events-none">
-          drag · scroll · click
+        <div class="absolute top-4 right-4 z-10 flex items-center gap-3">
+          <div class="flex items-center bg-ink-900/80 backdrop-blur border border-ink-700 rounded-lg p-0.5 text-[11px] font-medium pointer-events-auto">
+            <button id="edge-mode-tags" class="px-2.5 py-1 rounded-md tab-active">Tags</button>
+            <button id="edge-mode-semantic" class="px-2.5 py-1 rounded-md text-ink-300 inline-flex items-center gap-1">
+              Semantic
+              <span id="semantic-badge" class="w-1.5 h-1.5 rounded-full bg-ink-400"></span>
+            </button>
+          </div>
+          <div class="text-xs text-ink-400 pointer-events-none hidden md:block">drag · scroll · click</div>
         </div>
         <svg id="graph-svg"></svg>
         <!-- Hover preview card -->
@@ -389,17 +448,17 @@
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
-        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.2</div>
+        <span class="w-2 h-2 rounded-full bg-accent-500"></span>
+        <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.2</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">In-browser semantic search</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Real embeddings running entirely in the browser (transformers.js + MiniLM). Connections become semantic, not just tag-based. No data leaves your machine.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Real sentence embeddings (MiniLM-L6-v2) run <em class="text-pulse-500 not-italic">in your browser</em>. Toggle to "Semantic" in the graph to see meaning-based connections — no data leaves your machine.</p>
     </div>
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-ink-400"></span>
-        <div class="text-xs font-mono tracking-wider text-ink-300">LATER · v0.3</div>
+        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
+        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.3</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">Ask your notes</h3>
       <p class="text-ink-300 text-sm leading-relaxed">Type a question. Lumen finds the most relevant chunks, shows you exactly what it will send, and returns a cited answer via an LLM of your choice.</p>
@@ -738,7 +797,73 @@ let state = {
   selectedId: null,
   mode: 'graph',            // 'graph' | 'notes'
   fuse: null,
+  embeddings: new Map(),    // noteId -> Float32Array-like
+  edgeMode: 'tags',         // 'tags' | 'semantic'
+  aiState: 'idle',          // idle | loading | ready | error
 };
+
+// ---------- Embedding cache (IndexedDB) ----------
+const IDB_NAME = 'lumen';
+const IDB_STORE = 'embeddings';
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function contentHash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+function embedKey(note) {
+  return `${note.id}:${contentHash(note.title + '\n' + note.content)}`;
+}
+
+// ---------- Embed all notes (lazy-triggered) ----------
+async function ensureEmbeddings() {
+  if (!window.LumenAI) return;
+  await window.LumenAI.init();
+  for (const note of state.notes) {
+    if (state.embeddings.has(note.id)) continue;
+    const key = embedKey(note);
+    let vec = await idbGet(key).catch(() => null);
+    if (!vec) {
+      vec = await window.LumenAI.embed(note.title + '\n\n' + note.content);
+      await idbSet(key, vec).catch(() => {});
+    }
+    state.embeddings.set(note.id, vec);
+  }
+}
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+  return s; // vectors are normalized by the pipeline
+}
 
 function allTags() {
   const s = new Set();
@@ -753,10 +878,19 @@ function rebuild() {
     threshold: 0.35,
     ignoreLocation: true,
   });
+  // If the user has already opted into AI (model loading/ready), embed any new notes.
+  if (window.LumenAI && window.LumenAI.state !== 'idle') {
+    ensureEmbeddings().then(() => {
+      if (state.edgeMode === 'semantic' && state.mode === 'graph') {
+        graphRendered = false;
+        renderGraph();
+      }
+    }).catch(err => console.error('[Lumen] embedding error', err));
+  }
 }
 
-// ---------- Graph edges from tags ----------
-function buildEdges(nodes) {
+// ---------- Graph edges ----------
+function buildEdgesByTags(nodes) {
   const edges = [];
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
@@ -768,6 +902,44 @@ function buildEdges(nodes) {
     }
   }
   return edges;
+}
+function buildEdgesBySemantic(nodes, topK = 3, minSim = 0.30) {
+  // For each node, connect to its top-K most similar peers above minSim.
+  // Deduplicate reciprocals.
+  const edges = [];
+  const seen = new Set();
+  for (let i = 0; i < nodes.length; i++) {
+    const a = state.embeddings.get(nodes[i].id);
+    if (!a) continue;
+    const sims = [];
+    for (let j = 0; j < nodes.length; j++) {
+      if (i === j) continue;
+      const b = state.embeddings.get(nodes[j].id);
+      if (!b) continue;
+      const s = cosine(a, b);
+      if (s >= minSim) sims.push({ j, s });
+    }
+    sims.sort((x, y) => y.s - x.s);
+    for (const { j, s } of sims.slice(0, topK)) {
+      const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({
+        source: nodes[i].id,
+        target: nodes[j].id,
+        weight: Math.max(1, Math.round(s * 5)),
+        shared: [`${(s * 100).toFixed(0)}%`],
+        similarity: s,
+      });
+    }
+  }
+  return edges;
+}
+function buildEdges(nodes) {
+  if (state.edgeMode === 'semantic' && state.embeddings.size >= 2) {
+    return buildEdgesBySemantic(nodes);
+  }
+  return buildEdgesByTags(nodes);
 }
 
 // ---------- Tag → color ----------
@@ -1001,19 +1173,97 @@ function setMode(m) {
 }
 
 // ---------- Search ----------
-function onSearch(q) {
-  if (!q.trim()) {
+let searchSeq = 0;
+async function onSearch(q) {
+  const mySeq = ++searchSeq;
+  const query = q.trim();
+  if (!query) {
     state.filteredIds = null;
   } else {
-    const res = state.fuse.search(q).map(r => r.item.id);
-    state.filteredIds = res;
+    // Fuzzy baseline: Fuse scores are 0 (best) → 1 (worst); we invert.
+    const fuseRes = state.fuse.search(query).map(r => ({ id: r.item.id, fuzzy: 1 - (r.score ?? 0.5) }));
+    const fuzzyMap = new Map(fuseRes.map(r => [r.id, r.fuzzy]));
+
+    let ranked;
+    const canSemantic = state.aiState === 'ready' && state.embeddings.size >= state.notes.length;
+    if (canSemantic) {
+      try {
+        const qvec = await window.LumenAI.embed(query);
+        if (mySeq !== searchSeq) return; // newer query arrived
+        ranked = state.notes.map(n => {
+          const sim = cosine(qvec, state.embeddings.get(n.id) || []);
+          const fuzzy = fuzzyMap.get(n.id) ?? 0;
+          // 65% semantic + 35% fuzzy — semantic-dominated, but keyword still boosts literal matches
+          return { id: n.id, score: sim * 0.65 + fuzzy * 0.35 };
+        }).filter(r => r.score > 0.18).sort((a, b) => b.score - a.score);
+      } catch {
+        ranked = fuseRes.map(r => ({ id: r.id, score: r.fuzzy }));
+      }
+    } else {
+      ranked = fuseRes.map(r => ({ id: r.id, score: r.fuzzy }));
+    }
+    state.filteredIds = ranked.map(r => r.id);
   }
+
+  if (mySeq !== searchSeq) return;
   renderNoteList();
-  // also highlight in graph by dimming non-matches
   if (graphRendered) {
     const set = state.filteredIds ? new Set(state.filteredIds) : null;
     d3.select('#graph-svg').selectAll('.node-group')
       .classed('node-dim', d => set ? !set.has(d.id) : false);
+  }
+}
+
+// ---------- Edge mode ----------
+function setEdgeMode(mode) {
+  state.edgeMode = mode;
+  const t = document.getElementById('edge-mode-tags');
+  const s = document.getElementById('edge-mode-semantic');
+  if (mode === 'semantic') {
+    s.classList.add('tab-active'); s.classList.remove('text-ink-300');
+    t.classList.remove('tab-active'); t.classList.add('text-ink-300');
+    // Lazy-init AI on first semantic use
+    if (window.LumenAI && state.aiState === 'idle') {
+      ensureEmbeddings().then(() => {
+        if (state.edgeMode === 'semantic' && state.mode === 'graph') {
+          graphRendered = false;
+          renderGraph();
+        }
+      }).catch(err => console.error('[Lumen]', err));
+    }
+  } else {
+    t.classList.add('tab-active'); t.classList.remove('text-ink-300');
+    s.classList.remove('tab-active'); s.classList.add('text-ink-300');
+  }
+  if (state.mode === 'graph') {
+    graphRendered = false;
+    renderGraph();
+  }
+}
+
+// ---------- AI status indicator ----------
+function updateAiPill(detail) {
+  state.aiState = detail.state;
+  const pill = document.getElementById('ai-pill');
+  const dot = document.getElementById('ai-dot');
+  const label = document.getElementById('ai-label');
+  const badge = document.getElementById('semantic-badge');
+  if (!pill) return;
+  if (detail.state === 'loading') {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-pulse-500 pulse-dot';
+    label.textContent = `AI loading ${Math.round((detail.progress || 0))}%`;
+    if (badge) badge.className = 'w-1.5 h-1.5 rounded-full bg-pulse-500 pulse-dot';
+  } else if (detail.state === 'ready') {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-accent-500';
+    label.textContent = 'AI ready';
+    if (badge) badge.className = 'w-1.5 h-1.5 rounded-full bg-accent-500';
+  } else if (detail.state === 'error') {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
+    label.textContent = 'AI error';
+    if (badge) badge.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
+  } else {
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-ink-400';
+    label.textContent = 'AI idle';
   }
 }
 
@@ -1090,12 +1340,18 @@ function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
 // ---------- Wiring ----------
 document.addEventListener('DOMContentLoaded', () => {
+  // Listen for AI status from the module script
+  window.addEventListener('lumen:ai', (e) => updateAiPill(e.detail));
+
   rebuild();
   // Initial render
   setMode('graph');
 
   document.getElementById('tab-graph').addEventListener('click', () => setMode('graph'));
   document.getElementById('tab-notes').addEventListener('click', () => setMode('notes'));
+
+  document.getElementById('edge-mode-tags').addEventListener('click', () => setEdgeMode('tags'));
+  document.getElementById('edge-mode-semantic').addEventListener('click', () => setEdgeMode('semantic'));
 
   document.getElementById('search-input').addEventListener('input', e => onSearch(e.target.value));
 

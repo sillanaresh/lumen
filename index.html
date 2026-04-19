@@ -14,6 +14,12 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script>
+  if (window['pdfjsLib']) {
+    window['pdfjsLib'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+  }
+</script>
 
 <script type="module">
   // Transformers.js — runs entirely in the browser.
@@ -239,7 +245,7 @@
         <div class="absolute inset-0 w-7 h-7 rounded-full bg-accent-500 opacity-30 blur-md"></div>
       </div>
       <span class="font-bold text-lg tracking-tight">Lumen</span>
-      <span class="text-ink-400 text-xs ml-1 font-mono">v0.3</span>
+      <span class="text-ink-400 text-xs ml-1 font-mono">v0.4</span>
     </div>
     <div class="hidden md:flex items-center gap-6 text-sm text-ink-300">
       <a href="#app" class="hover:text-ink-100 transition">Try it</a>
@@ -374,6 +380,12 @@
           <span class="inline-flex items-center gap-1.5">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export
+          </span>
+        </button>
+        <button id="btn-ingest" class="btn-ghost text-xs" title="Import a PDF or URL">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+            Import
           </span>
         </button>
         <button id="btn-add" class="btn-primary text-xs">
@@ -564,11 +576,20 @@
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
-        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.4</div>
+        <span class="w-2 h-2 rounded-full bg-accent-500"></span>
+        <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.4</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">Ingest anything</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF, paste a URL, or connect a folder. Lumen extracts, summarizes, and weaves the new knowledge into your graph.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF or paste a URL. Lumen extracts the text in your browser (PDFs never leave your machine), embeds the new content, and weaves it into your graph instantly.</p>
+    </div>
+
+    <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
+        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.5</div>
+      </div>
+      <h3 class="text-lg font-semibold mb-2">Bring your own folder</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Optional sync via a Dropbox or iCloud folder you choose. Your notes stay yours — Lumen still stores nothing on our side.</p>
     </div>
   </div>
 </section>
@@ -581,7 +602,7 @@
       <span>Lumen · built as a portfolio project</span>
     </div>
     <div class="flex items-center gap-4 text-xs font-mono">
-      <span>v0.1</span>
+      <span>v0.4</span>
       <span>·</span>
       <span>zero servers</span>
       <span>·</span>
@@ -654,6 +675,81 @@
     <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-ink-700">
       <button id="modal-cancel" class="btn-ghost text-xs">Cancel</button>
       <button id="modal-save" class="btn-primary text-xs">Save to my brain</button>
+    </div>
+  </div>
+</div>
+
+<!-- =============== INGEST MODAL =============== -->
+<div id="ingest-modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
+  <div class="w-full max-w-2xl rounded-2xl border border-ink-600 bg-ink-900 shadow-2xl fade-in">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-ink-700">
+      <div>
+        <div class="text-xs font-mono text-accent-500 tracking-widest">IMPORT</div>
+        <div class="text-sm text-ink-300 mt-0.5">Drop a PDF or paste a URL — Lumen extracts the text and weaves it into your graph</div>
+      </div>
+      <button id="ingest-close" class="text-ink-400 hover:text-ink-100 text-xl leading-none">×</button>
+    </div>
+
+    <div class="px-5 pt-4">
+      <div class="flex items-center bg-ink-950 border border-ink-700 rounded-lg p-1 w-max">
+        <button id="ingest-tab-pdf" class="px-3 py-1.5 rounded-md text-xs font-medium tab-active">PDF file</button>
+        <button id="ingest-tab-url" class="px-3 py-1.5 rounded-md text-xs font-medium text-ink-300">Web URL</button>
+      </div>
+    </div>
+
+    <div class="p-5 space-y-4">
+      <!-- Source input -->
+      <div id="ingest-pane-pdf">
+        <label id="ingest-dropzone" for="ingest-file" class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-ink-600 rounded-xl p-8 text-center cursor-pointer hover:border-accent-500/60 hover:bg-ink-800/40 transition">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffd166" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+          <div class="text-sm text-ink-200 font-medium">Drop a PDF, or click to choose</div>
+          <div class="text-[11px] text-ink-400">Parsed in your browser — the file never leaves your machine.</div>
+          <input id="ingest-file" type="file" accept="application/pdf,.pdf" class="hidden" />
+        </label>
+      </div>
+
+      <div id="ingest-pane-url" class="hidden">
+        <label class="block text-xs font-medium text-ink-200 mb-2">Article URL</label>
+        <div class="flex gap-2">
+          <input id="ingest-url" type="url" placeholder="https://example.com/article"
+            class="flex-1 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-sm text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 font-mono" />
+          <button id="ingest-url-fetch" class="btn-primary text-xs">Fetch</button>
+        </div>
+        <p class="text-[11px] text-ink-400 mt-1.5">Content is fetched via <a href="https://r.jina.ai/" target="_blank" class="text-pulse-500 hover:underline">r.jina.ai</a>, a public reader that returns clean Markdown. Your browser → jina → target site; no Lumen server in between.</p>
+      </div>
+
+      <!-- Progress -->
+      <div id="ingest-progress" class="hidden rounded-lg border border-pulse-500/30 bg-pulse-500/5 p-3 text-xs text-pulse-500 font-mono flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-pulse-500 pulse-dot"></span>
+        <span id="ingest-progress-text">Working…</span>
+      </div>
+
+      <!-- Review form (shown after successful extract) -->
+      <div id="ingest-review" class="hidden space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-ink-200 mb-1">Title</label>
+          <input id="ingest-title" type="text"
+            class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-sm font-semibold text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-ink-200 mb-1">Tags</label>
+          <input id="ingest-tags" type="text" placeholder="tags, comma separated"
+            class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-xs text-ink-200 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 font-mono" />
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-medium text-ink-200">Extracted content <span class="text-ink-400 font-mono" id="ingest-content-stats">—</span></label>
+            <span class="text-[11px] text-ink-400">editable</span>
+          </div>
+          <textarea id="ingest-content" class="w-full h-48 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2.5 text-xs text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 font-mono resize-none"></textarea>
+        </div>
+        <div class="text-[11px] text-ink-400">Content is capped at 16,000 characters. The first heading becomes the title. Source is recorded as a footnote.</div>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-ink-700">
+      <button id="ingest-cancel" class="btn-ghost text-xs">Cancel</button>
+      <button id="ingest-save" class="btn-primary text-xs hidden">Add to graph</button>
     </div>
   </div>
 </div>
@@ -1703,7 +1799,7 @@ function saveNewNote() {
 function exportAll() {
   const payload = {
     exportedAt: new Date().toISOString(),
-    source: 'lumen-v0.1',
+    source: 'lumen-v0.4',
     seedNotes: SEED_NOTES.length,
     userNotes: loadUserNotes(),
   };
@@ -1712,6 +1808,154 @@ function exportAll() {
   a.href = URL.createObjectURL(blob);
   a.download = `lumen-export-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
+}
+
+// ---------- Ingest (PDF / URL) ----------
+const INGEST_MAX_CHARS = 16000;
+
+let ingestState = {
+  source: 'pdf',     // 'pdf' | 'url'
+  extracted: null,   // { title, content, tags, sourceLabel }
+};
+
+function openIngest() {
+  const m = document.getElementById('ingest-modal');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+  setIngestTab('pdf');
+  resetIngest();
+}
+function closeIngest() {
+  const m = document.getElementById('ingest-modal');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+  resetIngest();
+}
+function resetIngest() {
+  ingestState.extracted = null;
+  document.getElementById('ingest-file').value = '';
+  document.getElementById('ingest-url').value = '';
+  document.getElementById('ingest-title').value = '';
+  document.getElementById('ingest-tags').value = '';
+  document.getElementById('ingest-content').value = '';
+  document.getElementById('ingest-content-stats').textContent = '—';
+  document.getElementById('ingest-review').classList.add('hidden');
+  document.getElementById('ingest-save').classList.add('hidden');
+  hideIngestProgress();
+}
+function setIngestTab(which) {
+  ingestState.source = which;
+  const pdfBtn = document.getElementById('ingest-tab-pdf');
+  const urlBtn = document.getElementById('ingest-tab-url');
+  const pdfPane = document.getElementById('ingest-pane-pdf');
+  const urlPane = document.getElementById('ingest-pane-url');
+  if (which === 'pdf') {
+    pdfBtn.classList.add('tab-active'); pdfBtn.classList.remove('text-ink-300');
+    urlBtn.classList.remove('tab-active'); urlBtn.classList.add('text-ink-300');
+    pdfPane.classList.remove('hidden'); urlPane.classList.add('hidden');
+  } else {
+    urlBtn.classList.add('tab-active'); urlBtn.classList.remove('text-ink-300');
+    pdfBtn.classList.remove('tab-active'); pdfBtn.classList.add('text-ink-300');
+    urlPane.classList.remove('hidden'); pdfPane.classList.add('hidden');
+  }
+}
+function showIngestProgress(text) {
+  const el = document.getElementById('ingest-progress');
+  document.getElementById('ingest-progress-text').textContent = text;
+  el.classList.remove('hidden');
+}
+function hideIngestProgress() {
+  document.getElementById('ingest-progress').classList.add('hidden');
+}
+function showIngestReview(extracted) {
+  ingestState.extracted = extracted;
+  document.getElementById('ingest-title').value = extracted.title;
+  document.getElementById('ingest-tags').value = (extracted.tags || []).join(', ');
+  document.getElementById('ingest-content').value = extracted.content;
+  const stats = `· ${extracted.content.length.toLocaleString()} chars`;
+  document.getElementById('ingest-content-stats').textContent = stats;
+  document.getElementById('ingest-review').classList.remove('hidden');
+  document.getElementById('ingest-save').classList.remove('hidden');
+  hideIngestProgress();
+}
+
+async function extractPdf(file) {
+  if (!window.pdfjsLib) throw new Error('PDF library failed to load. Reload and try again.');
+  const buffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    showIngestProgress(`Extracting page ${i} of ${pdf.numPages}…`);
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    // reconstruct lines by y-coordinate
+    const lines = [];
+    let cur = { y: null, parts: [] };
+    for (const item of tc.items) {
+      const y = item.transform ? Math.round(item.transform[5]) : null;
+      if (cur.y === null || Math.abs(y - cur.y) < 2) {
+        cur.parts.push(item.str);
+        cur.y = y;
+      } else {
+        lines.push(cur.parts.join(' ').trim());
+        cur = { y, parts: [item.str] };
+      }
+    }
+    if (cur.parts.length) lines.push(cur.parts.join(' ').trim());
+    pages.push(lines.filter(Boolean).join('\n'));
+  }
+  let content = pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const firstLine = content.split('\n').find(s => s.trim().length > 0) || '';
+  const base = file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
+  const title = (firstLine.length >= 8 && firstLine.length <= 120) ? firstLine.trim() : (base || 'Untitled PDF');
+  const truncated = content.length > INGEST_MAX_CHARS;
+  if (truncated) content = content.slice(0, INGEST_MAX_CHARS).trimEnd() + '\n\n*(truncated — first ' + INGEST_MAX_CHARS.toLocaleString() + ' characters)*';
+  content += `\n\n---\n*Source: \`${file.name}\` · ${pdf.numPages} pages · imported ${new Date().toISOString().slice(0,10)}*`;
+  return { title, content, tags: ['pdf', 'imported'], sourceLabel: file.name };
+}
+
+async function extractUrl(rawUrl) {
+  let url = rawUrl.trim();
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  let u;
+  try { u = new URL(url); } catch { throw new Error('That doesn\'t look like a valid URL.'); }
+  showIngestProgress(`Fetching ${u.hostname}…`);
+  const reader = 'https://r.jina.ai/' + url;
+  const res = await fetch(reader, { headers: { 'Accept': 'text/plain' } });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status}). Some sites block readers — try a different URL.`);
+  let text = await res.text();
+  // r.jina.ai prepends a header block: Title: ..., URL Source: ..., Markdown Content: ...
+  const titleMatch = text.match(/^Title:\s*(.+)$/m);
+  const contentSplit = text.split(/^Markdown Content:\s*$/m);
+  let title = (titleMatch ? titleMatch[1] : u.hostname).trim();
+  let body = (contentSplit.length > 1 ? contentSplit.slice(1).join('\n') : text).trim();
+  body = body.replace(/\n{3,}/g, '\n\n');
+  const truncated = body.length > INGEST_MAX_CHARS;
+  if (truncated) body = body.slice(0, INGEST_MAX_CHARS).trimEnd() + '\n\n*(truncated — first ' + INGEST_MAX_CHARS.toLocaleString() + ' characters)*';
+  body += `\n\n---\n*Source: [${u.hostname}](${url}) · imported ${new Date().toISOString().slice(0,10)}*`;
+  return { title, content: body, tags: ['web', 'imported'], sourceLabel: u.hostname };
+}
+
+async function saveIngestedNote() {
+  const title = document.getElementById('ingest-title').value.trim();
+  const tagsRaw = document.getElementById('ingest-tags').value.trim();
+  const content = document.getElementById('ingest-content').value.trim();
+  if (!title || !content) { alert('Title and content required.'); return; }
+  const tags = tagsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const id = 'i_' + Date.now().toString(36);
+  const userNotes = loadUserNotes();
+  userNotes.push({ id, title, tags, content, imported: true });
+  try {
+    saveUserNotes(userNotes);
+  } catch (err) {
+    alert('Could not save — likely localStorage is full. Try shortening the content or clearing old notes.');
+    return;
+  }
+  rebuild();
+  state.selectedId = id;
+  graphRendered = false;
+  closeIngest();
+  setMode('graph');
 }
 
 // ---------- Utilities ----------
@@ -1750,10 +1994,74 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       closeModal();
       closeSettings();
+      closeIngest();
     }
   });
 
   document.getElementById('btn-export').addEventListener('click', exportAll);
+
+  // --- Ingest modal (PDF / URL) ---
+  const ingestModal = document.getElementById('ingest-modal');
+  document.getElementById('btn-ingest').addEventListener('click', openIngest);
+  document.getElementById('ingest-close').addEventListener('click', closeIngest);
+  document.getElementById('ingest-cancel').addEventListener('click', closeIngest);
+  ingestModal.addEventListener('click', e => { if (e.target.id === 'ingest-modal') closeIngest(); });
+  document.getElementById('ingest-tab-pdf').addEventListener('click', () => setIngestTab('pdf'));
+  document.getElementById('ingest-tab-url').addEventListener('click', () => setIngestTab('url'));
+
+  const fileInput = document.getElementById('ingest-file');
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    try {
+      showIngestProgress(`Reading ${f.name}…`);
+      const extracted = await extractPdf(f);
+      showIngestReview(extracted);
+    } catch (err) {
+      hideIngestProgress();
+      alert('Could not read PDF: ' + err.message);
+    }
+  });
+
+  // drag-and-drop on the dropzone
+  const dz = document.getElementById('ingest-dropzone');
+  ['dragenter', 'dragover'].forEach(evt => dz.addEventListener(evt, e => {
+    e.preventDefault(); dz.classList.add('border-accent-500');
+  }));
+  ['dragleave', 'drop'].forEach(evt => dz.addEventListener(evt, e => {
+    e.preventDefault(); dz.classList.remove('border-accent-500');
+  }));
+  dz.addEventListener('drop', async e => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    if (!/pdf$/i.test(f.name) && f.type !== 'application/pdf') {
+      alert('Only PDFs for now.'); return;
+    }
+    try {
+      showIngestProgress(`Reading ${f.name}…`);
+      const extracted = await extractPdf(f);
+      showIngestReview(extracted);
+    } catch (err) {
+      hideIngestProgress();
+      alert('Could not read PDF: ' + err.message);
+    }
+  });
+
+  document.getElementById('ingest-url-fetch').addEventListener('click', async () => {
+    const url = document.getElementById('ingest-url').value.trim();
+    if (!url) return;
+    try {
+      const extracted = await extractUrl(url);
+      showIngestReview(extracted);
+    } catch (err) {
+      hideIngestProgress();
+      alert('Could not fetch: ' + err.message);
+    }
+  });
+  document.getElementById('ingest-url').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ingest-url-fetch').click(); }
+  });
+  document.getElementById('ingest-save').addEventListener('click', saveIngestedNote);
 
   // --- Settings modal ---
   const settingsModal = document.getElementById('settings-modal');

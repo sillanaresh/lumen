@@ -4,13 +4,13 @@
 
 Lumen is a local-first knowledge graph app. Notes become nodes, shared ideas become edges, and your thinking becomes *visible*. No server, no account, no tracking — everything runs in your browser.
 
-This repo is **v0.3**: a single-file, zero-build web app that demonstrates the core experience on a seeded workspace about *how to learn effectively* — with real sentence embeddings running directly in your browser, and retrieval-augmented Q&A that cites its sources.
+This repo is **v0.4**: a single-file, zero-build web app that demonstrates the core experience on a seeded workspace about *how to learn effectively* — with real sentence embeddings running directly in your browser, retrieval-augmented Q&A that cites its sources, and one-click ingestion of PDFs and web URLs.
 
 ## Live demo
 
 → **[sillanaresh.github.io/lumen](https://sillanaresh.github.io/lumen/)**
 
-## What's in v0.3
+## What's in v0.4
 
 - **Interactive D3 force-directed graph** of 12 hand-written notes on learning science
 - **Two edge modes**:
@@ -22,6 +22,8 @@ This repo is **v0.3**: a single-file, zero-build web app that demonstrates the c
   - Top-5 notes retrieved by cosine similarity
   - Context shown to you *before* it's sent (full transparency)
   - Answer streams from a free OpenRouter model (BYOK) with inline `[n01]`-style citations that link back to source notes
+- **Ingest PDFs** — drop or pick any PDF. Text is extracted client-side with pdf.js, the first heading becomes the title, and the note joins the graph with auto-embedding. The file never leaves your machine.
+- **Ingest URLs** — paste a link. Clean markdown is fetched via `r.jina.ai` (a public reader), previewed for review, then becomes a note.
 - **Polished markdown viewer** with connections panel and tag chips
 - **Add your own notes** — persisted in `localStorage`, joining the graph instantly
 - **Embedding cache** — computed vectors are stored in `IndexedDB`, keyed by content hash, so repeat visits are instant
@@ -59,6 +61,8 @@ Most "AI notes" apps send your thoughts to someone else's server. Lumen flips th
 | Search | Fuse.js (fuzzy) + cosine similarity over embeddings (semantic) |
 | Embeddings | transformers.js 2.17 running MiniLM-L6-v2 entirely in the browser |
 | Q&A | OpenRouter free models (BYOK), direct browser→OpenRouter, SSE streaming |
+| PDF ingest | pdf.js 4.0 — text extraction runs in the browser, file stays local |
+| URL ingest | `r.jina.ai` public reader (returns clean Markdown, no API key) |
 | Storage | `localStorage` for notes, `IndexedDB` for embedding cache |
 | Hosting | GitHub Pages — free, static, indefinite |
 
@@ -66,7 +70,7 @@ Most "AI notes" apps send your thoughts to someone else's server. Lumen flips th
 
 - **v0.2** ✅ *Shipped* — In-browser semantic search (transformers.js + MiniLM embeddings).
 - **v0.3** ✅ *Shipped* — Ask your notes: retrieval-augmented Q&A via OpenRouter free models, BYOK, streaming answers with inline citations.
-- **v0.4** — Ingest PDFs and URLs. Drop a paper, get a note with auto-extracted concepts that weave into the graph.
+- **v0.4** ✅ *Shipped* — Ingest PDFs and URLs. Drop a paper or paste a link; it becomes a note that joins the graph.
 - **v0.5** — Optional sync via your own Dropbox/iCloud folder. We still store nothing.
 
 ## About this project

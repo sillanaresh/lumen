@@ -198,6 +198,24 @@
     pointer-events: none;
   }
 
+  /* Citation chip (used in answers) */
+  .citation-chip {
+    display: inline-flex; align-items: center;
+    font-size: 0.72rem; font-weight: 600;
+    padding: 0.1rem 0.45rem; border-radius: 0.35rem;
+    background: rgba(255, 209, 102, 0.1);
+    color: #ffd166;
+    border: 1px solid rgba(255, 209, 102, 0.3);
+    margin: 0 0.1rem;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.3;
+    vertical-align: baseline;
+  }
+  .citation-chip:hover { background: rgba(255, 209, 102, 0.22); transform: translateY(-1px); }
+  .ask-answer { min-height: 2em; }
+
   /* Hero floating nodes animation */
   @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(8px,-6px); } }
   @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-6px,8px); } }
@@ -221,7 +239,7 @@
         <div class="absolute inset-0 w-7 h-7 rounded-full bg-accent-500 opacity-30 blur-md"></div>
       </div>
       <span class="font-bold text-lg tracking-tight">Lumen</span>
-      <span class="text-ink-400 text-xs ml-1 font-mono">v0.2</span>
+      <span class="text-ink-400 text-xs ml-1 font-mono">v0.3</span>
     </div>
     <div class="hidden md:flex items-center gap-6 text-sm text-ink-300">
       <a href="#app" class="hover:text-ink-100 transition">Try it</a>
@@ -330,6 +348,12 @@
             Notes
           </span>
         </button>
+        <button id="tab-ask" class="px-3 py-1.5 rounded-md text-sm font-medium text-ink-300">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            Ask
+          </span>
+        </button>
       </div>
 
       <div class="relative flex-1 min-w-[180px] max-w-md">
@@ -343,6 +367,9 @@
           <span id="ai-dot" class="w-1.5 h-1.5 rounded-full bg-ink-400"></span>
           <span id="ai-label">AI idle</span>
         </div>
+        <button id="btn-settings" class="btn-ghost text-xs" title="Settings (API key, model)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
         <button id="btn-export" class="btn-ghost text-xs" title="Export all notes as JSON">
           <span class="inline-flex items-center gap-1.5">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -413,9 +440,80 @@
               <span class="w-1.5 h-1.5 rounded-full bg-pulse-500"></span>
               <div class="text-xs font-medium text-ink-200">Ask your notes</div>
             </div>
-            <div class="text-[11px] text-ink-400 leading-relaxed">Coming soon: ask a question and get a cited answer synthesized from your entire workspace.</div>
+            <div class="text-[11px] text-ink-400 leading-relaxed mb-2">Type a question — Lumen searches your notes for the most relevant passages and synthesizes a cited answer.</div>
+            <button id="goto-ask" class="text-[11px] text-accent-500 hover:text-accent-400 font-medium">Open Ask →</button>
           </div>
         </aside>
+      </div>
+
+      <!-- ASK MODE -->
+      <div id="view-ask" class="absolute inset-0 hidden flex-col bg-ink-950">
+        <div class="flex-1 overflow-y-auto">
+          <div class="max-w-3xl mx-auto px-6 md:px-10 py-8">
+
+            <!-- BYOK banner (shown when no key configured) -->
+            <div id="byok-banner" class="rounded-xl border border-pulse-500/30 bg-pulse-500/5 p-5 mb-6 hidden">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-pulse-500/20 border border-pulse-500/40 flex items-center justify-center shrink-0">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="font-semibold text-ink-100 mb-1">Bring your own key</div>
+                  <div class="text-sm text-ink-300 leading-relaxed mb-3">
+                    Ask uses a free model on <a href="https://openrouter.ai/" target="_blank" class="text-pulse-500 underline decoration-ink-600 hover:decoration-pulse-500">OpenRouter</a>. Get a free API key — your key is stored in this browser only and sent directly from here to OpenRouter. We never see it.
+                  </div>
+                  <ol class="text-xs text-ink-400 space-y-1 mb-3 list-decimal list-inside">
+                    <li>Sign in at <a href="https://openrouter.ai/keys" target="_blank" class="text-pulse-500 hover:underline">openrouter.ai/keys</a></li>
+                    <li>Create a new API key (no credit card needed for free models)</li>
+                    <li>Paste it below</li>
+                  </ol>
+                  <div class="flex gap-2">
+                    <input id="byok-input" type="password" placeholder="sk-or-..." class="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 text-xs font-mono text-ink-100 placeholder-ink-400 focus:outline-none focus:border-pulse-500/60 focus:ring-1 focus:ring-pulse-500/30" />
+                    <button id="byok-save" class="btn-primary text-xs">Save key</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty state (no question yet) -->
+            <div id="ask-empty" class="text-center py-12">
+              <div class="inline-flex w-14 h-14 rounded-2xl bg-accent-500/10 border border-accent-500/30 items-center justify-center mb-5">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffd166" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              </div>
+              <h3 class="text-2xl font-bold mb-2">Ask your notes anything</h3>
+              <p class="text-ink-300 mb-8 max-w-md mx-auto">Lumen retrieves the most relevant passages via embeddings, shows you exactly what it will send, and answers with citations back to the source notes.</p>
+              <div class="flex flex-wrap gap-2 justify-center max-w-xl mx-auto">
+                <button class="ask-suggest btn-ghost text-xs" data-q="What's the difference between active recall and spaced repetition?">Active recall vs. spaced repetition?</button>
+                <button class="ask-suggest btn-ghost text-xs" data-q="Why does deliberate practice work?">Why does deliberate practice work?</button>
+                <button class="ask-suggest btn-ghost text-xs" data-q="How does sleep affect what I remember?">How does sleep affect memory?</button>
+                <button class="ask-suggest btn-ghost text-xs" data-q="What should I stop doing when I study?">What should I stop doing when I study?</button>
+              </div>
+            </div>
+
+            <!-- Conversation -->
+            <div id="ask-conversation" class="space-y-6"></div>
+          </div>
+        </div>
+
+        <!-- Composer pinned to bottom -->
+        <div class="border-t border-ink-700 bg-ink-900/80 backdrop-blur px-6 md:px-10 py-4">
+          <div class="max-w-3xl mx-auto">
+            <div class="flex gap-2 items-end">
+              <textarea id="ask-input" rows="1" placeholder="Ask a question about your notes…"
+                class="flex-1 bg-ink-800 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30 resize-none max-h-32"></textarea>
+              <button id="ask-send" class="btn-primary text-xs self-stretch px-4">
+                <span class="inline-flex items-center gap-1.5">
+                  Ask
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </span>
+              </button>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-ink-400">
+              <span>⌘ + Enter to send · Answers cite source notes</span>
+              <span id="ask-model-hint" class="font-mono"></span>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -457,17 +555,17 @@
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
-        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.3</div>
+        <span class="w-2 h-2 rounded-full bg-accent-500"></span>
+        <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.3</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">Ask your notes</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Type a question. Lumen finds the most relevant chunks, shows you exactly what it will send, and returns a cited answer via an LLM of your choice.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Retrieval-augmented Q&A. Embeddings find relevant passages, the context is shown to you <em class="text-pulse-500 not-italic">before sending</em>, and the answer cites source notes. Bring your own free OpenRouter key.</p>
     </div>
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-ink-400"></span>
-        <div class="text-xs font-mono tracking-wider text-ink-300">LATER · v0.4</div>
+        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
+        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.4</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">Ingest anything</h3>
       <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF, paste a URL, or connect a folder. Lumen extracts, summarizes, and weaves the new knowledge into your graph.</p>
@@ -491,6 +589,45 @@
     </div>
   </div>
 </footer>
+
+<!-- =============== SETTINGS MODAL =============== -->
+<div id="settings-modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
+  <div class="w-full max-w-xl rounded-2xl border border-ink-600 bg-ink-900 shadow-2xl fade-in">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-ink-700">
+      <div>
+        <div class="text-xs font-mono text-accent-500 tracking-widest">SETTINGS</div>
+        <div class="text-sm text-ink-300 mt-0.5">Configure Lumen</div>
+      </div>
+      <button id="settings-close" class="text-ink-400 hover:text-ink-100 text-xl leading-none">×</button>
+    </div>
+    <div class="p-5 space-y-5">
+      <div>
+        <label class="block text-xs font-medium text-ink-200 mb-2">OpenRouter API key</label>
+        <input id="settings-key" type="password" placeholder="sk-or-..."
+          class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-xs font-mono text-ink-100 placeholder-ink-400 focus:outline-none focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/30" />
+        <p class="text-[11px] text-ink-400 mt-1.5">Stored only in this browser's localStorage. <a href="https://openrouter.ai/keys" target="_blank" class="text-pulse-500 hover:underline">Get a key →</a></p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-ink-200 mb-2">Model</label>
+        <select id="settings-model" class="w-full bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-xs text-ink-100 focus:outline-none focus:border-accent-500/60">
+          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (free) — recommended</option>
+          <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (free)</option>
+          <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek Chat v3.1 (free)</option>
+          <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B (free) — fastest</option>
+        </select>
+        <p class="text-[11px] text-ink-400 mt-1.5">All options are free tier; rate-limited by OpenRouter.</p>
+      </div>
+      <div class="pt-2 border-t border-ink-700">
+        <button id="settings-clear-cache" class="text-xs text-ink-300 hover:text-ink-100">Clear embedding cache</button>
+        <p class="text-[11px] text-ink-400 mt-1">Removes cached vectors from IndexedDB. Recomputes on next use.</p>
+      </div>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-ink-700">
+      <button id="settings-cancel" class="btn-ghost text-xs">Cancel</button>
+      <button id="settings-save" class="btn-primary text-xs">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- =============== ADD NOTE MODAL =============== -->
 <div id="modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
@@ -1152,23 +1289,39 @@ function renderGraph() {
 // ---------- Mode switching ----------
 function setMode(m) {
   state.mode = m;
-  const gTab = document.getElementById('tab-graph');
-  const nTab = document.getElementById('tab-notes');
-  const gView = document.getElementById('view-graph');
-  const nView = document.getElementById('view-notes');
+  const tabs = {
+    graph: document.getElementById('tab-graph'),
+    notes: document.getElementById('tab-notes'),
+    ask: document.getElementById('tab-ask'),
+  };
+  const views = {
+    graph: document.getElementById('view-graph'),
+    notes: document.getElementById('view-notes'),
+    ask: document.getElementById('view-ask'),
+  };
+  for (const k of Object.keys(tabs)) {
+    const active = (k === m);
+    tabs[k].classList.toggle('tab-active', active);
+    tabs[k].classList.toggle('text-ink-300', !active);
+    views[k].classList.toggle('hidden', !active);
+  }
+  // view-ask uses flex column; re-apply display when shown
+  views.ask.style.display = (m === 'ask') ? 'flex' : '';
+
   if (m === 'graph') {
-    gTab.classList.add('tab-active'); gTab.classList.remove('text-ink-300');
-    nTab.classList.remove('tab-active'); nTab.classList.add('text-ink-300');
-    gView.classList.remove('hidden'); nView.classList.add('hidden');
     if (!graphRendered) renderGraph();
-  } else {
-    nTab.classList.add('tab-active'); nTab.classList.remove('text-ink-300');
-    gTab.classList.remove('tab-active'); gTab.classList.add('text-ink-300');
-    nView.classList.remove('hidden'); gView.classList.add('hidden');
-    nView.classList.add('grid'); // ensure grid
+  } else if (m === 'notes') {
     if (!state.selectedId) state.selectedId = state.notes[0]?.id;
     renderNoteList();
     renderNoteViewer();
+  } else if (m === 'ask') {
+    updateByokBanner();
+    updateAskModelHint();
+    // Kick off embedding load in background (Ask needs embeddings for retrieval)
+    if (window.LumenAI && window.LumenAI.state === 'idle') {
+      ensureEmbeddings().catch(err => console.error('[Lumen]', err));
+    }
+    setTimeout(() => document.getElementById('ask-input')?.focus(), 50);
   }
 }
 
@@ -1267,6 +1420,235 @@ function updateAiPill(detail) {
   }
 }
 
+// ---------- Settings / BYOK ----------
+const SETTINGS_KEY = 'lumen.settings.v1';
+function loadSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    return {
+      apiKey: raw.apiKey || '',
+      model: raw.model || 'meta-llama/llama-3.3-70b-instruct:free',
+    };
+  } catch { return { apiKey: '', model: 'meta-llama/llama-3.3-70b-instruct:free' }; }
+}
+function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+
+function updateByokBanner() {
+  const s = loadSettings();
+  const banner = document.getElementById('byok-banner');
+  if (!banner) return;
+  banner.classList.toggle('hidden', !!s.apiKey);
+}
+function updateAskModelHint() {
+  const s = loadSettings();
+  const hint = document.getElementById('ask-model-hint');
+  if (hint) hint.textContent = s.apiKey ? s.model.split('/').pop() : 'no key set';
+}
+
+// ---------- Ask: retrieval ----------
+async function retrieveContext(question, topK = 5) {
+  await ensureEmbeddings();
+  const qvec = await window.LumenAI.embed(question);
+  const ranked = state.notes
+    .map(n => ({ note: n, score: cosine(qvec, state.embeddings.get(n.id) || []) }))
+    .filter(r => r.score > 0.15)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+  return ranked;
+}
+
+// ---------- Ask: stream from OpenRouter ----------
+async function streamAnswer({ apiKey, model, messages, onToken }) {
+  const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': location.origin,
+      'X-Title': 'Lumen',
+    },
+    body: JSON.stringify({ model, messages, stream: true, temperature: 0.3 }),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`OpenRouter ${resp.status}: ${txt.slice(0, 200)}`);
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data:')) continue;
+      const payload = trimmed.slice(5).trim();
+      if (payload === '[DONE]') return;
+      try {
+        const json = JSON.parse(payload);
+        const delta = json.choices?.[0]?.delta?.content || '';
+        if (delta) onToken(delta);
+      } catch { /* ignore partial */ }
+    }
+  }
+}
+
+// ---------- Ask: render Q&A ----------
+function replaceCitationsInHTML(html) {
+  const cited = new Set();
+  const rendered = html.replace(/\[(n\d+)\]/gi, (_, id) => {
+    const nid = id.toLowerCase();
+    const n = state.notes.find(x => x.id === nid);
+    if (n) {
+      cited.add(nid);
+      return `<button class="citation-chip" data-id="${nid}" title="${escapeHtml(n.title)}">[${nid}]</button>`;
+    }
+    return `[${escapeHtml(id)}]`;
+  });
+  return { html: rendered, cited: Array.from(cited) };
+}
+
+function appendQAElement(question, contextNotes) {
+  const conv = document.getElementById('ask-conversation');
+  document.getElementById('ask-empty').classList.add('hidden');
+
+  const qaId = 'qa-' + Date.now().toString(36);
+  const ctxItems = contextNotes.map(({ note, score }) => `
+    <li class="py-1.5 flex items-start gap-2">
+      <button class="text-left text-pulse-500 hover:underline" data-id="${note.id}">${escapeHtml(note.title)}</button>
+      <span class="text-[10px] font-mono text-ink-400 shrink-0 mt-0.5">[${note.id}] · ${(score * 100).toFixed(0)}%</span>
+    </li>
+  `).join('');
+
+  const wrap = document.createElement('div');
+  wrap.id = qaId;
+  wrap.className = 'fade-in rounded-xl border border-ink-700 bg-ink-900 overflow-hidden';
+  wrap.innerHTML = `
+    <div class="px-5 py-4 border-b border-ink-700 bg-ink-800/50">
+      <div class="text-[10px] font-mono tracking-widest text-ink-400 uppercase mb-1">Question</div>
+      <div class="text-ink-100 font-medium">${escapeHtml(question)}</div>
+    </div>
+    <details class="border-b border-ink-700 group">
+      <summary class="px-5 py-3 text-xs text-ink-300 cursor-pointer hover:text-ink-100 flex items-center gap-2 list-none">
+        <svg class="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="font-mono tracking-widest text-[10px] uppercase text-ink-400">Context sent</span>
+        <span class="text-[11px] text-ink-400">· ${contextNotes.length} notes</span>
+      </summary>
+      <ul class="px-5 pb-4 text-sm">
+        ${ctxItems || '<li class="text-xs text-ink-400 italic">No relevant notes found. Asking the model anyway with no context.</li>'}
+      </ul>
+    </details>
+    <div class="px-5 py-5">
+      <div class="text-[10px] font-mono tracking-widest text-accent-500 uppercase mb-2">Answer</div>
+      <div class="prose-lumen ask-answer" data-qa="${qaId}"><span class="text-ink-400 inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-accent-500 pulse-dot"></span>thinking…</span></div>
+      <div class="ask-citations mt-4 flex flex-wrap gap-1.5"></div>
+    </div>
+  `;
+  conv.prepend(wrap);
+  // wire context click-to-open
+  wrap.querySelectorAll('button[data-id]').forEach(b => {
+    b.addEventListener('click', () => selectNote(b.dataset.id));
+  });
+  return qaId;
+}
+
+function finalizeAnswer(qaId, answer) {
+  const el = document.querySelector(`.ask-answer[data-qa="${qaId}"]`);
+  if (!el) return;
+  // Render markdown first, then swap [nXX] in the resulting HTML with citation buttons
+  const markedHtml = marked.parse(answer);
+  const { html, cited } = replaceCitationsInHTML(markedHtml);
+  el.innerHTML = html;
+  el.querySelectorAll('.citation-chip').forEach(b => {
+    b.addEventListener('click', () => selectNote(b.dataset.id));
+  });
+  // Tail chips
+  const chipsWrap = el.parentElement.querySelector('.ask-citations');
+  if (cited.length > 0) {
+    chipsWrap.innerHTML = '<span class="text-[10px] font-mono tracking-widest text-ink-400 uppercase mr-1 self-center">Sources:</span>' +
+      cited.map(id => {
+        const n = state.notes.find(x => x.id === id);
+        return n ? `<button class="citation-chip" data-id="${id}">${escapeHtml(n.title)}</button>` : '';
+      }).join('');
+    chipsWrap.querySelectorAll('.citation-chip').forEach(b => {
+      b.addEventListener('click', () => selectNote(b.dataset.id));
+    });
+  }
+}
+
+async function askQuestion(question) {
+  const q = (question || '').trim();
+  if (!q) return;
+  const settings = loadSettings();
+  if (!settings.apiKey) {
+    updateByokBanner();
+    document.getElementById('byok-input')?.focus();
+    return;
+  }
+
+  const sendBtn = document.getElementById('ask-send');
+  sendBtn.disabled = true;
+  sendBtn.style.opacity = '0.6';
+
+  let qaId;
+  try {
+    // Retrieve context
+    const contextNotes = await retrieveContext(q, 5);
+    qaId = appendQAElement(q, contextNotes);
+
+    // Build prompt
+    const contextBlocks = contextNotes.map(({ note }) => {
+      const body = note.content.replace(/^#+\s.*\n?/m, '').trim().slice(0, 1200);
+      return `[${note.id}] Title: ${note.title}\n${body}`;
+    }).join('\n\n---\n\n');
+
+    const system = `You are Lumen, an assistant that answers questions using ONLY the user's notes provided as context.
+Rules:
+- Ground every claim in the supplied notes; if the notes don't answer, say so honestly.
+- Cite notes inline using their bracket IDs, e.g. [n01], [n04]. Every substantive claim should carry a citation.
+- Keep answers tight (ideally under 180 words). Use markdown lightly (bold, a short list) when it helps.
+- Do not invent notes that don't exist. Do not quote the raw [nXX] IDs in prose; only in citations.`;
+
+    const user = `User's notes (context):\n\n${contextBlocks || '(no relevant notes found)'}\n\n---\n\nQuestion: ${q}`;
+
+    // Stream the answer
+    let accum = '';
+    const el = document.querySelector(`.ask-answer[data-qa="${qaId}"]`);
+    await streamAnswer({
+      apiKey: settings.apiKey,
+      model: settings.model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      onToken: (t) => {
+        accum += t;
+        // live-render as plain text with light citation coloring
+        const live = escapeHtml(accum).replace(/\[(n\d+)\]/gi,
+          (_, id) => `<span class="text-accent-500 font-mono text-xs">[${id}]</span>`);
+        el.innerHTML = live + '<span class="inline-block w-1.5 h-4 bg-accent-500 ml-0.5 align-middle animate-pulse"></span>';
+      },
+    });
+
+    // Final render with markdown + clickable citations
+    finalizeAnswer(qaId, accum);
+  } catch (err) {
+    console.error('[Ask] error', err);
+    if (qaId) {
+      const el = document.querySelector(`.ask-answer[data-qa="${qaId}"]`);
+      if (el) el.innerHTML = `<div class="text-red-400 text-sm">Error: ${escapeHtml(String(err.message || err))}</div>`;
+    } else {
+      alert('Error: ' + (err.message || err));
+    }
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.style.opacity = '';
+  }
+}
+
 // ---------- Add note modal ----------
 function openModal() {
   const m = document.getElementById('modal');
@@ -1349,6 +1731,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('tab-graph').addEventListener('click', () => setMode('graph'));
   document.getElementById('tab-notes').addEventListener('click', () => setMode('notes'));
+  document.getElementById('tab-ask').addEventListener('click', () => setMode('ask'));
+  document.getElementById('goto-ask')?.addEventListener('click', () => setMode('ask'));
 
   document.getElementById('edge-mode-tags').addEventListener('click', () => setEdgeMode('tags'));
   document.getElementById('edge-mode-semantic').addEventListener('click', () => setEdgeMode('semantic'));
@@ -1363,10 +1747,91 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.id === 'modal') closeModal();
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') {
+      closeModal();
+      closeSettings();
+    }
   });
 
   document.getElementById('btn-export').addEventListener('click', exportAll);
+
+  // --- Settings modal ---
+  const settingsModal = document.getElementById('settings-modal');
+  function openSettings() {
+    const s = loadSettings();
+    document.getElementById('settings-key').value = s.apiKey;
+    document.getElementById('settings-model').value = s.model;
+    settingsModal.classList.remove('hidden');
+    settingsModal.classList.add('flex');
+  }
+  function closeSettings() {
+    settingsModal.classList.add('hidden');
+    settingsModal.classList.remove('flex');
+  }
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  document.getElementById('settings-cancel').addEventListener('click', closeSettings);
+  document.getElementById('settings-save').addEventListener('click', () => {
+    const apiKey = document.getElementById('settings-key').value.trim();
+    const model = document.getElementById('settings-model').value;
+    saveSettings({ apiKey, model });
+    updateByokBanner();
+    updateAskModelHint();
+    closeSettings();
+  });
+  document.getElementById('settings-clear-cache').addEventListener('click', async () => {
+    if (!confirm('Clear all cached embeddings?')) return;
+    try {
+      const db = await idbOpen();
+      await new Promise((r) => { const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).clear(); tx.oncomplete = r; });
+      state.embeddings.clear();
+      alert('Embedding cache cleared.');
+    } catch (err) { alert('Error: ' + err.message); }
+  });
+  settingsModal.addEventListener('click', e => {
+    if (e.target.id === 'settings-modal') closeSettings();
+  });
+
+  // --- BYOK banner inline save ---
+  document.getElementById('byok-save')?.addEventListener('click', () => {
+    const key = document.getElementById('byok-input').value.trim();
+    if (!key) return;
+    const s = loadSettings();
+    saveSettings({ ...s, apiKey: key });
+    updateByokBanner();
+    updateAskModelHint();
+    document.getElementById('ask-input')?.focus();
+  });
+
+  // --- Ask composer ---
+  const askInput = document.getElementById('ask-input');
+  const askSend = document.getElementById('ask-send');
+  askSend.addEventListener('click', () => {
+    const q = askInput.value.trim();
+    if (!q) return;
+    askInput.value = '';
+    askInput.style.height = 'auto';
+    askQuestion(q);
+  });
+  askInput.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      askSend.click();
+    }
+  });
+  // auto-resize textarea
+  askInput.addEventListener('input', () => {
+    askInput.style.height = 'auto';
+    askInput.style.height = Math.min(askInput.scrollHeight, 128) + 'px';
+  });
+  // suggestion chips
+  document.querySelectorAll('.ask-suggest').forEach(b => {
+    b.addEventListener('click', () => {
+      askInput.value = b.dataset.q;
+      askInput.focus();
+      askInput.dispatchEvent(new Event('input'));
+    });
+  });
 
   // Re-render graph on window resize
   let resizeTimer = null;

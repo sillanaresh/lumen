@@ -1,50 +1,49 @@
-# Lumen 2.0 Testing Walkthrough
+# Lumen — manual test walkthrough
 
-Run locally:
+Automated coverage: open `test.html` (23 unit checks on the pure pipeline). This
+walkthrough covers the stateful/UI paths the unit tests can't. Run against
+`python3 -m http.server 8000` → `http://localhost:8000`.
 
-```bash
-python3 -m http.server 8000
-```
+Reset between full passes: Settings → *Reset workspace…* → type `RESET`, and
+clear site data for a true first-run.
 
-Open `http://localhost:8000`.
+## First run & onboarding
+1. Open the app in a clean profile → 3-step welcome tour appears. *Skip tour* dismisses it permanently (reload to confirm it stays gone).
+2. Default view is the Graph with 12 seeded notes; stats line shows notes/links/chunks.
 
-## Smoke Test
+## Graph
+3. Drag a node; hover shows a preview card; click opens the note in Library.
+4. Toggle *Semantic links* → AI pill shows download progress → edges re-render with cosine labels. (Offline: a toast reports the failure and tag links keep working.)
+5. *List view* shows the screen-reader alternative with per-note link lists.
 
-1. Load the app. Confirm the onboarding modal appears on first visit.
-2. Step through onboarding. Confirm it switches Graph, Ask, and Evals modes.
-3. Open Graph. Confirm seeded notes render as nodes and tag edges.
-4. Search `sleep`. Confirm unrelated nodes dim.
-5. Open Notes. Click at least two notes and confirm connections update.
-6. Open Ask with no API key. Ask `How should I space my study sessions?`.
-7. Confirm retrieval-only result appears with ranked chunks and the exact prompt.
-8. Click a retrieved chunk. Confirm the parent note opens and a cited chunk callout appears.
-9. Add an OpenRouter key in Settings if available. Ask again and confirm streaming answer cites chunk IDs such as `[n02.1]`.
-10. Click an answer citation. Confirm the note opens with the cited chunk callout.
-11. Press Thumbs up/down. Confirm Settings shows a feedback event.
-12. Export feedback JSON from Settings.
-13. Open Import, choose PDF. Confirm text PDFs show a preview before saving.
-14. Try a scanned/image PDF. Confirm the error explains that Lumen cannot read scanned PDFs yet.
-15. Paste a public URL. Confirm copy says the URL is fetched via `r.jina.ai`.
-16. Save an import. Confirm it appears in the graph and Notes list.
-17. Import the same content again. Confirm duplicate warning appears.
-18. Open `http://localhost:8000/#eval`.
-19. Run fast eval. Confirm hit@1, hit@5, MRR, lift, no-answer metric, and per-case drilldowns render.
-20. Export eval JSON.
-21. Export eval Markdown and confirm the table is README-ready.
-22. Run semantic eval. Confirm local AI status shows loading/ready and the run either completes or fails with a clear model-download explanation.
-23. Open Settings. Confirm privacy section lists Ask, URL import, and local-only data.
-24. Clear embedding cache. Confirm AI vectors are recomputed on next semantic use.
-25. Resize to mobile width. Confirm graph read-mode message appears and Notes/Ask remain usable.
+## Library
+6. Select notes; filter by search text and by tag chip (toggle off again).
+7. The right rail shows Connections, Semantic neighbors (after model load), and the Chunk map. Clicking a chunk-map row highlights that chunk above the note with a fading callout.
+8. *New note* → save with a `# heading` and ~2 paragraphs → toast confirms, note appears in list/graph, chunk map shows ≥1 chunk. Edit it; delete it (confirm dialog).
+9. Edit a *seeded* note → Eval Lab later shows the corpus-drift warning.
 
-## Error States
+## Ask — happy paths
+10. With no API key: ask "How should I space my study sessions?" → retrieval-only card with *Add API key* CTA; Evidence rail shows steps 1–4 with step 4 "not run — no API key set".
+11. Add a key (Settings → *test key* → ✓) → ask again → answer streams, citations render as chips; clicking `[n02.1]` opens the note scrolled to the highlighted chunk; sources row lists cited chunks.
+12. Evidence rail: scores + bars per chunk, exact prompt expands, token estimate present. Mark a chunk *relevant?* yes/no → toast confirms a local label.
+13. Thumbs up/down on an answer → "Saved locally"; Settings shows the feedback count; *Export JSON* downloads it; *Send to maker* opens a pre-filled GitHub issue (verify no API key anywhere in the payload).
 
-- Bad API key: paste an invalid OpenRouter key and ask a question. Expected: the answer card shows the OpenRouter error without losing retrieved chunks.
-- Network failure: go offline and run semantic search/eval. Expected: semantic path errors clearly or falls back to lexical retrieval.
-- URL blocked: import a URL that requires login. Expected: reader-service failure copy suggests trying another URL.
-- Empty/scanned PDF: import an image-only PDF. Expected: no empty note is created.
+## Ask — refusal & errors
+14. Ask "What is the capital of Finland?" → no-answer card ("Your notes don't seem to cover this"), with working *See what was searched* and *Ask the model anyway*.
+15. 401: save key `sk-or-invalid` → ask → error card names the bad key and links to Settings.
+16. Network: go offline (devtools) → ask (force past the gate if needed) → network error card with *Retry*; retry works after going online.
+17. 429: hammer a free model repeatedly → rate-limit card with wait/switch-model guidance.
+18. *Stop generating* mid-stream → card shows the partial answer as cancelled.
 
-## Regression Focus
+## Eval Lab
+19. *Run benchmark* (lexical) → progress bar, then 6 metric tiles populate; per-case rows filterable by All/Misses/No-answer; a row expands to gold notes, rubric, and retrieved chunks with scores; chunk chips open the source note.
+20. Run again in semantic mode (model downloads if needed) → both runs in history; tick two checkboxes → delta table with green/red deltas; *Cancel* mid-run saves a partial run badged in the metrics tile.
+21. *Export JSON* and *Export Markdown* download; the Markdown table matches the README format.
+22. With a drifted corpus (step 9): warning banner with *Reset corpus to benchmark* → resets and clears the warning.
 
-- Chunk IDs must remain stable for unchanged note text.
-- Ask and Evals must use the same `rankPassages` and `buildPrompt` pipeline.
-- Notes and embeddings must remain local unless the user explicitly asks a question via OpenRouter, imports a URL, exports data, or opens the GitHub issue draft.
+## Import
+23. PDF: drop a text-based PDF → parsing progress → editable preview → *Add to workspace* → toast with *Open note*; note is chunked and in the graph. Re-import the same file → duplicate warning. A scanned/image PDF → "appears to be scanned images" error, no empty note created.
+24. URL: paste an article URL → fetched via r.jina.ai → preview → save. A bogus URL → friendly failure message.
+
+## Shell
+25. ⌘K palette: type a word from a note → note results navigate; commands (Run benchmark, Settings, New note) work; arrow keys + Enter navigate. Legacy hash `#eval` redirects to the Eval Lab. Narrow window (<920px): bottom nav appears, graph is replaced by a notice, Library/Ask/Lab remain usable.

@@ -1,66 +1,587 @@
 {
-  "version": "1.0",
-  "corpus": "seeded-learning-science-v2",
-  "description": "Retrieval benchmark for Lumen's seeded learning-science workspace. Cases are authored before tuning and run fully client-side in #eval.",
-  "metrics": ["hit@1", "hit@5", "mrr", "no_answer_accuracy"],
+  "version": "2.0",
+  "corpus": "learning-science-v2",
+  "description": "Retrieval benchmark for Lumen's seeded workspace. Questions were authored against the corpus BEFORE retrieval tuning. no-answer cases are hallucination traps: the correct behavior is to decline. Runs fully client-side in the Eval Lab against the same pipeline functions the Ask feature uses.",
+  "metrics": [
+    "hit@1",
+    "hit@5",
+    "mrr",
+    "no_answer_accuracy",
+    "latency_p50"
+  ],
   "cases": [
-    {"id":"e01","question":"Why is rereading weaker than testing yourself from memory?","goldNoteIds":["n01"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e02","question":"What should I do after a lecture if I want to remember it?","goldNoteIds":["n01"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e03","question":"How do I turn textbook headings into a study method?","goldNoteIds":["n01"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e04","question":"What is the link between flashcards and memory traces?","goldNoteIds":["n01","n02"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e05","question":"Why should I wait until I am almost forgetting before reviewing?","goldNoteIds":["n02"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e06","question":"What review intervals are suggested for long term retention?","goldNoteIds":["n02"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e07","question":"Why does spaced repetition feel uncomfortable?","goldNoteIds":["n02"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e08","question":"What tool pattern adjusts review timing for you?","goldNoteIds":["n02"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e09","question":"How can I find gaps in my understanding by explaining simply?","goldNoteIds":["n03"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e10","question":"Why is jargon dangerous when learning a concept?","goldNoteIds":["n03"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e11","question":"What are the four steps of the Feynman technique?","goldNoteIds":["n03"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e12","question":"What should I do when I get stuck during a plain-language explanation?","goldNoteIds":["n03"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e13","question":"What makes practice deliberate instead of just more hours?","goldNoteIds":["n04"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e14","question":"Why is the 10000 hours idea incomplete?","goldNoteIds":["n04"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e15","question":"How should a practice session feel if I am actually improving?","goldNoteIds":["n04"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e16","question":"What ingredients are needed for skill improvement with feedback?","goldNoteIds":["n04"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e17","question":"Why do mixed problem sets help more than blocked drills?","goldNoteIds":["n05"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e18","question":"What is the difference between blocking and interleaving?","goldNoteIds":["n05"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e19","question":"Why does alternating problem types feel worse but test better?","goldNoteIds":["n05"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e20","question":"How does interleaving help when real problems arrive out of order?","goldNoteIds":["n05"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e21","question":"Why are mental models better than memorizing isolated facts?","goldNoteIds":["n06"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e22","question":"What are examples of mental models worth keeping?","goldNoteIds":["n06"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e23","question":"How do models help me regenerate facts on demand?","goldNoteIds":["n06"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e24","question":"How can I tell when an explanation is useful across domains?","goldNoteIds":["n06"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e25","question":"Why is forgetting not necessarily a failure?","goldNoteIds":["n07"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e26","question":"What did Ebbinghaus show about what happens after 24 hours?","goldNoteIds":["n07"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e27","question":"How should I work with forgetting instead of fighting it?","goldNoteIds":["n07","n02"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e28","question":"Why would perfect memory make recall worse?","goldNoteIds":["n07"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e29","question":"Why does curiosity make learning cheaper?","goldNoteIds":["n08"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e30","question":"What should I do when something surprises me while studying?","goldNoteIds":["n08"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e31","question":"How does reading widely help learning by analogy?","goldNoteIds":["n08"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e32","question":"What list should I keep to bring curiosity into study?","goldNoteIds":["n08"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e33","question":"Why is sleep important after studying?","goldNoteIds":["n09"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e34","question":"What happens in the hippocampus during slow wave sleep?","goldNoteIds":["n09"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e35","question":"Why might an all-nighter hurt exam performance?","goldNoteIds":["n09"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e36","question":"How can REM sleep change how new memories connect?","goldNoteIds":["n09"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e37","question":"What is the minimum ritual for reading with a pen?","goldNoteIds":["n10"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e38","question":"How can I test whether a book taught me or only entertained me?","goldNoteIds":["n10"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e39","question":"Why is active reading slower but more productive?","goldNoteIds":["n10"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e40","question":"What should I write in the margin when reading?","goldNoteIds":["n10"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e41","question":"Why can highlighted notes make me feel ready when I am not?","goldNoteIds":["n11"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e42","question":"What is the difference between familiarity and retrievability?","goldNoteIds":["n11"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e43","question":"How can I tell whether I truly know something right now?","goldNoteIds":["n11","n01"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e44","question":"What should readiness be based on instead of familiar feeling?","goldNoteIds":["n11"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e45","question":"Why does learning in public accelerate feedback?","goldNoteIds":["n12"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e46","question":"How can teaching others become active recall?","goldNoteIds":["n12","n01"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e47","question":"Do I need to be an expert before sharing what I learn?","goldNoteIds":["n12"],"category":"single-hop","difficulty":"easy"},
-    {"id":"e48","question":"How does an audience improve clarity while learning?","goldNoteIds":["n12","n03"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e49","question":"What study methods fight the illusion of competence?","goldNoteIds":["n01","n11","n05"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e50","question":"Which notes explain why discomfort can be a sign that learning is working?","goldNoteIds":["n02","n04","n05"],"category":"multi-hop","difficulty":"medium"},
-    {"id":"e51","question":"What is the capital of Finland?","goldNoteIds":[],"category":"no-answer","difficulty":"easy"},
-    {"id":"e52","question":"How do I configure Kubernetes horizontal pod autoscaling?","goldNoteIds":[],"category":"no-answer","difficulty":"medium"},
-    {"id":"e53","question":"What did Marie Curie win her Nobel prizes for?","goldNoteIds":[],"category":"no-answer","difficulty":"easy"},
-    {"id":"e54","question":"Which OpenRouter model is cheapest today?","goldNoteIds":[],"category":"no-answer","difficulty":"medium"},
-    {"id":"e55","question":"How should I file taxes as an independent contractor?","goldNoteIds":[],"category":"no-answer","difficulty":"medium"},
-    {"id":"e56","question":"What is the best treatment for a sprained ankle?","goldNoteIds":[],"category":"no-answer","difficulty":"medium"},
-    {"id":"e57","question":"Who won the 2026 NBA Finals?","goldNoteIds":[],"category":"no-answer","difficulty":"easy"},
-    {"id":"e58","question":"How do I implement OAuth PKCE in a React app?","goldNoteIds":[],"category":"no-answer","difficulty":"medium"}
+    {
+      "id": "e01",
+      "question": "Why is rereading weaker than testing yourself from memory?",
+      "expected": [
+        "n01"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve active recall and familiarity vs memory."
+    },
+    {
+      "id": "e02",
+      "question": "What should I do after a lecture if I want to remember it?",
+      "expected": [
+        "n01"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve active recall practice steps."
+    },
+    {
+      "id": "e03",
+      "question": "How do I turn textbook headings into a study method?",
+      "expected": [
+        "n01"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve heading-to-question active recall."
+    },
+    {
+      "id": "e04",
+      "question": "What is the link between flashcards and memory traces?",
+      "expected": [
+        "n01",
+        "n02"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve retrieval practice and spaced repetition."
+    },
+    {
+      "id": "e05",
+      "question": "Why should I wait until I am almost forgetting before reviewing?",
+      "expected": [
+        "n02"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve spaced repetition and forgetting curve."
+    },
+    {
+      "id": "e06",
+      "question": "What review intervals are suggested for long term retention?",
+      "expected": [
+        "n02"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve spaced repetition intervals."
+    },
+    {
+      "id": "e07",
+      "question": "Why does spaced repetition feel uncomfortable?",
+      "expected": [
+        "n02"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve edge-of-forgetting discomfort."
+    },
+    {
+      "id": "e08",
+      "question": "What tool pattern adjusts review timing for you?",
+      "expected": [
+        "n02"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve Anki, RemNote, or Mochi mention."
+    },
+    {
+      "id": "e09",
+      "question": "How can I find gaps in my understanding by explaining simply?",
+      "expected": [
+        "n03"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve the Feynman technique."
+    },
+    {
+      "id": "e10",
+      "question": "Why is jargon dangerous when learning a concept?",
+      "expected": [
+        "n03"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve jargon as understanding debt."
+    },
+    {
+      "id": "e11",
+      "question": "What are the four steps of the Feynman technique?",
+      "expected": [
+        "n03"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve the four-step section."
+    },
+    {
+      "id": "e12",
+      "question": "What should I do when I get stuck during a plain-language explanation?",
+      "expected": [
+        "n03"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve gap identification and source review."
+    },
+    {
+      "id": "e13",
+      "question": "What makes practice deliberate instead of just more hours?",
+      "expected": [
+        "n04"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve specific goals, feedback, attention, repetition."
+    },
+    {
+      "id": "e14",
+      "question": "Why is the 10000 hours idea incomplete?",
+      "expected": [
+        "n04"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve quality of practice over hours."
+    },
+    {
+      "id": "e15",
+      "question": "How should a practice session feel if I am actually improving?",
+      "expected": [
+        "n04"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve productive discomfort zone."
+    },
+    {
+      "id": "e16",
+      "question": "What ingredients are needed for skill improvement with feedback?",
+      "expected": [
+        "n04"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve deliberate practice ingredients."
+    },
+    {
+      "id": "e17",
+      "question": "Why do mixed problem sets help more than blocked drills?",
+      "expected": [
+        "n05"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve interleaving vs blocking."
+    },
+    {
+      "id": "e18",
+      "question": "What is the difference between blocking and interleaving?",
+      "expected": [
+        "n05"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve definitions of both methods."
+    },
+    {
+      "id": "e19",
+      "question": "Why does alternating problem types feel worse but test better?",
+      "expected": [
+        "n05"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve interleaving discomfort and transfer."
+    },
+    {
+      "id": "e20",
+      "question": "How does interleaving help when real problems arrive out of order?",
+      "expected": [
+        "n05"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve deciding which tool to use."
+    },
+    {
+      "id": "e21",
+      "question": "Why are mental models better than memorizing isolated facts?",
+      "expected": [
+        "n06"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve facts are slippery, models are sticky."
+    },
+    {
+      "id": "e22",
+      "question": "What are examples of mental models worth keeping?",
+      "expected": [
+        "n06"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve supply demand, compounding, incentives, second-order effects."
+    },
+    {
+      "id": "e23",
+      "question": "How do models help me regenerate facts on demand?",
+      "expected": [
+        "n06"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve retrieval scaffolds."
+    },
+    {
+      "id": "e24",
+      "question": "How can I tell when an explanation is useful across domains?",
+      "expected": [
+        "n06"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve collecting models across domains."
+    },
+    {
+      "id": "e25",
+      "question": "Why is forgetting not necessarily a failure?",
+      "expected": [
+        "n07"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve forgetting as filtering signal from noise."
+    },
+    {
+      "id": "e26",
+      "question": "What did Ebbinghaus show about what happens after 24 hours?",
+      "expected": [
+        "n07"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve forgetting curve."
+    },
+    {
+      "id": "e27",
+      "question": "How should I work with forgetting instead of fighting it?",
+      "expected": [
+        "n07",
+        "n02"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve spacing, retrieval, connection."
+    },
+    {
+      "id": "e28",
+      "question": "Why would perfect memory make recall worse?",
+      "expected": [
+        "n07"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve filter not hard drive idea."
+    },
+    {
+      "id": "e29",
+      "question": "Why does curiosity make learning cheaper?",
+      "expected": [
+        "n08"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve curiosity as cheapest attention."
+    },
+    {
+      "id": "e30",
+      "question": "What should I do when something surprises me while studying?",
+      "expected": [
+        "n08"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve follow threads and chase surprises."
+    },
+    {
+      "id": "e31",
+      "question": "How does reading widely help learning by analogy?",
+      "expected": [
+        "n08"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve odd domains produce analogies."
+    },
+    {
+      "id": "e32",
+      "question": "What list should I keep to bring curiosity into study?",
+      "expected": [
+        "n08"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve questions I would love to answer."
+    },
+    {
+      "id": "e33",
+      "question": "Why is sleep important after studying?",
+      "expected": [
+        "n09"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve sleep and consolidation."
+    },
+    {
+      "id": "e34",
+      "question": "What happens in the hippocampus during slow wave sleep?",
+      "expected": [
+        "n09"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve replay and long-term storage."
+    },
+    {
+      "id": "e35",
+      "question": "Why might an all-nighter hurt exam performance?",
+      "expected": [
+        "n09"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve sleep deprivation and weaker exam brain."
+    },
+    {
+      "id": "e36",
+      "question": "How can REM sleep change how new memories connect?",
+      "expected": [
+        "n09"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve linking new memories to existing ones."
+    },
+    {
+      "id": "e37",
+      "question": "What is the minimum ritual for reading with a pen?",
+      "expected": [
+        "n10"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve underline, margin why, paragraph from memory."
+    },
+    {
+      "id": "e38",
+      "question": "How can I test whether a book taught me or only entertained me?",
+      "expected": [
+        "n10"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve explaining three arguments a week later."
+    },
+    {
+      "id": "e39",
+      "question": "Why is active reading slower but more productive?",
+      "expected": [
+        "n10"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve passive reading vs active learning."
+    },
+    {
+      "id": "e40",
+      "question": "What should I write in the margin when reading?",
+      "expected": [
+        "n10"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve why in three words."
+    },
+    {
+      "id": "e41",
+      "question": "Why can highlighted notes make me feel ready when I am not?",
+      "expected": [
+        "n11"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve illusion of competence."
+    },
+    {
+      "id": "e42",
+      "question": "What is the difference between familiarity and retrievability?",
+      "expected": [
+        "n11"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve metacognition bug."
+    },
+    {
+      "id": "e43",
+      "question": "How can I tell whether I truly know something right now?",
+      "expected": [
+        "n11",
+        "n01"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve explain it out loud in plain words."
+    },
+    {
+      "id": "e44",
+      "question": "What should readiness be based on instead of familiar feeling?",
+      "expected": [
+        "n11"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve reproduce it cold."
+    },
+    {
+      "id": "e45",
+      "question": "Why does learning in public accelerate feedback?",
+      "expected": [
+        "n12"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve internet correction and accountability."
+    },
+    {
+      "id": "e46",
+      "question": "How can teaching others become active recall?",
+      "expected": [
+        "n12",
+        "n01"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve writing or teaching as retrieval."
+    },
+    {
+      "id": "e47",
+      "question": "Do I need to be an expert before sharing what I learn?",
+      "expected": [
+        "n12"
+      ],
+      "category": "single-hop",
+      "difficulty": "easy",
+      "rubric": "Should retrieve one week ahead of reader."
+    },
+    {
+      "id": "e48",
+      "question": "How does an audience improve clarity while learning?",
+      "expected": [
+        "n12",
+        "n03"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve simple language and Feynman link."
+    },
+    {
+      "id": "e49",
+      "question": "What study methods fight the illusion of competence?",
+      "expected": [
+        "n01",
+        "n11",
+        "n05"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve active recall, practice testing, interleaving."
+    },
+    {
+      "id": "e50",
+      "question": "Which notes explain why discomfort can be a sign that learning is working?",
+      "expected": [
+        "n02",
+        "n04",
+        "n05"
+      ],
+      "category": "multi-hop",
+      "difficulty": "medium",
+      "rubric": "Should retrieve spacing, deliberate practice, and interleaving discomfort."
+    },
+    {
+      "id": "e51",
+      "question": "What is the capital of Finland?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "easy",
+      "rubric": "Correct behavior is to say the notes do not cover this."
+    },
+    {
+      "id": "e52",
+      "question": "How do I configure Kubernetes horizontal pod autoscaling?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "medium",
+      "rubric": "Correct behavior is to avoid inventing DevOps advice from study notes."
+    },
+    {
+      "id": "e53",
+      "question": "What did Marie Curie win her Nobel prizes for?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "easy",
+      "rubric": "Correct behavior is to say the notes do not contain the fact."
+    },
+    {
+      "id": "e54",
+      "question": "Which OpenRouter model is cheapest today?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "medium",
+      "rubric": "Correct behavior is to avoid answering from missing/current pricing data."
+    },
+    {
+      "id": "e55",
+      "question": "How should I file taxes as an independent contractor?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "medium",
+      "rubric": "Correct behavior is to avoid unsupported financial/legal guidance."
+    },
+    {
+      "id": "e56",
+      "question": "What is the best treatment for a sprained ankle?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "medium",
+      "rubric": "Correct behavior is to avoid medical advice from unrelated notes."
+    },
+    {
+      "id": "e57",
+      "question": "Who won the 2026 NBA Finals?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "easy",
+      "rubric": "Correct behavior is to say this is not in the notes."
+    },
+    {
+      "id": "e58",
+      "question": "How do I implement OAuth PKCE in a React app?",
+      "expected": [],
+      "category": "no-answer",
+      "difficulty": "medium",
+      "rubric": "Correct behavior is to decline because the notes are about learning science."
+    }
   ]
 }

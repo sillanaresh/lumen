@@ -1,54 +1,86 @@
 # Lumen
 
-> Local-first notes AI that shows its work.
+> Private notes AI, measured in the open.
 
-Lumen is a single-file knowledge graph for notes with transparent RAG. Notes become graph nodes, long documents are chunked into citable passages, Ask shows the exact chunks and prompt before generation, and the built-in Quality Lab measures retrieval instead of hand-waving it.
+Lumen is a local-first knowledge graph for notes with **transparent RAG**: every AI answer ships with its evidence — the retrieved chunks and their scores, the exact prompt that left your browser, the token count, the cost — and the retrieval quality is measured by a **published benchmark you can run yourself, inside the app**.
 
-Live demo: **[sillanaresh.github.io/lumen](https://sillanaresh.github.io/lumen/)**
+**Live demo:** [sillanaresh.github.io/lumen](https://sillanaresh.github.io/lumen/)
 
-## What Is New In v0.5
+## The thesis
 
-- **Chunked retrieval:** notes and imports are split into stable chunks such as `[n02.1]`, with configurable `CHUNK_SIZE_CHARS` and overlap.
-- **Chunk-level citations:** answers can cite exact chunks, and clicking a citation opens the parent note with the cited passage highlighted.
-- **Retrieval inspector:** every Ask card shows ranked chunks, blended scores, the exact prompt, and an input-token estimate.
-- **Quality Lab:** open `#eval` to run a 58-case retrieval benchmark locally, including no-answer cases.
-- **Before/after comparison:** the eval runner compares chunked retrieval with the older whole-note baseline.
-- **Feedback hooks:** thumbs feedback is stored locally and can be exported or opened as a transparent GitHub issue draft.
-- **Honest privacy copy:** Settings lists exactly what stays local and what leaves during Ask or URL import.
-- **Onboarding and mobile read mode:** first-run tour plus a mobile path for Notes and Ask.
+Most AI note tools ask you to trust a black box. Lumen is built on the opposite bet: an AI product earns trust by **showing its work and publishing its numbers**.
 
-## Does It Actually Work?
+That turns into three product commitments:
 
-Run the benchmark in the app:
+1. **Local-first.** Notes, embeddings, eval runs, feedback, and your API key live in this browser. No account, no server, no analytics in the app. Semantic search runs on a 22 MB MiniLM model *inside the page* (transformers.js).
+2. **Transparent.** The Evidence panel shows the full question → retrieval → prompt → answer path for every ask. Citations like `[n02.1]` point at stable chunks; clicking one opens the source note at that passage.
+3. **Measured.** The Eval Lab runs a 58-case benchmark — including 8 *no-answer traps* that test hallucination resistance — against the **same pure functions** the Ask feature calls. Runs persist locally, are comparable side-by-side, and export to JSON/Markdown.
 
-1. Open `/lumen/#eval`.
-2. Click **Run fast eval** for retrieval-only metrics with no API key.
-3. Click **Run semantic eval** to use the same local MiniLM embeddings used by Ask.
-4. Export Markdown and paste the table below.
+## Honest refusal, by design
 
-| Run | Chunking | Mode | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| local smoke | chunked | lexical | 58 | 80% | 100% | 0.89 | 100% | 0% | 75% |
+If even the best retrieved chunk scores below a confidence threshold, Lumen answers **"Your notes don't seem to cover this"** — *before* any model call — with a link to what was searched and an explicit "ask the model anyway" override. Refusing on weak retrieval is cheaper, faster, and more honest than asking a model not to hallucinate and hoping.
 
-The seeded notes are short, so whole-note retrieval already performs well at hit@5. Lumen 2.0's quality gain is more visible in exact chunk citations, inspector debugging, no-answer tracking, and long PDF/URL imports where whole-note embeddings collapse multiple topics into one vector.
+## Does it actually work?
 
-Benchmark artifact: [`benchmark.json`](benchmark.json)  
-Eval notes: [`docs/eval-report.md`](docs/eval-report.md)
+Run it yourself: open the **Eval Lab** tab → *Run benchmark*. Lexical mode finishes in seconds with no API key or model download. Results below are from the seeded corpus (12 notes, 58 cases):
 
-## Privacy Model
+| Run | Mode | Top-k | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer | p50 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2026-06-11 | lexical | 5 | 58 | 76% | 98% | 0.86 | 98% | +0% | 75% | <1ms |
 
-Lumen is static and local-first, but not every action is purely local:
+Two honest caveats, because honest numbers are the product:
 
-- **Notes, PDFs, embeddings, eval runs, and feedback** are stored in this browser unless you export or send them.
-- **Ask** sends only the retrieved chunks shown in the inspector to OpenRouter, using your API key and selected model.
-- **URL import** sends the pasted URL to `r.jina.ai` to fetch a readable copy.
-- **Feedback send** opens a GitHub issue draft. You see the payload before posting.
+- **Chunking shows zero lift here by construction** — each seeded note fits in a single chunk, so chunked and whole-note retrieval coincide. Chunking's value appears on long PDF/URL imports (where one-vector-per-document retrieval collapses) and in **citation granularity**: answers point at the exact passage, not a whole document.
+- **No-answer accuracy is 75%, not 100%** — two of eight hallucination traps slip past the confidence gate, and the failure analysis (incidental keyword overlap, e.g. *"model"* matching the *Mental models* note title) is written up in the eval report. Knowing *which* questions fool the gate is the point of having one.
 
-There is no Lumen account, database, or app server.
+Benchmark: [`benchmark.json`](benchmark.json) · Methodology and caveats: [`docs/eval-report.md`](docs/eval-report.md)
 
-## Try It Locally
+## What leaves your machine
 
-No build step:
+"Local-first" is a precise claim, not a slogan. Exactly three actions send data out, all user-initiated:
+
+| Action | What is sent | To whom |
+|---|---|---|
+| Ask (with API key) | The retrieved chunks shown in Evidence + your question | OpenRouter, with **your** key, to the model **you** chose |
+| URL import | The URL you paste | r.jina.ai, which returns a readable copy |
+| Send feedback | A GitHub issue draft you see before posting | GitHub, only if you submit it |
+
+Everything else — notes, PDFs (parsed in-browser by pdf.js), embeddings, eval runs, feedback, your key — stays in the browser. Clear site data and it's gone.
+
+## Architecture
+
+Zero build step. No framework. The app is plain ES modules served statically:
+
+```
+index.html          app shell (≈60 lines)
+css/app.css         hand-rolled design system
+js/
+  pipeline.js       THE CORE — pure functions: chunking, scoring, retrieval,
+                    no-answer gate, prompt builder, eval metrics. No DOM, no
+                    storage, no network. Ask and the Eval Lab both call these.
+  store.js          workspace state, localStorage/IndexedDB, embedding engine
+  openrouter.js     streaming BYOK client with typed errors
+  ui.js             DOM helpers, modal, toasts
+  app.js            shell: router, ⌘K palette, settings, onboarding, import
+  views/            library · graph · ask · lab · about
+benchmark.json      58 eval cases (authored before tuning)
+test.html           zero-dependency unit tests for pipeline.js (open it)
+```
+
+Key invariant: **the eval measures the real pipeline.** `views/ask.js` and `views/lab.js` import the same `rankChunks` / `isNoAnswer` / `buildPrompt` from `pipeline.js`, so benchmark numbers can't drift from production behavior.
+
+| Area | Choice |
+|---|---|
+| Retrieval | ~300-token chunks (15% overlap, markdown-aware, code fences intact) · blend of 0.72·cosine + 0.28·keyword · linear scan (no vector DB needed at this scale) |
+| Embeddings | MiniLM-L6-v2 via transformers.js, cached in IndexedDB by content hash |
+| Generation | OpenRouter BYOK, streaming, free-tier models, mandatory chunk citations |
+| Graph | D3 force layout — nodes are notes, edges are shared tags or note-vector cosine |
+| Storage | localStorage (notes, settings, feedback) + IndexedDB (vectors, eval runs) |
+| Sanitization | Marked + DOMPurify for all rendered markdown |
+
+Why these trade-offs were chosen over the alternatives: [`docs/DECISIONS.md`](docs/DECISIONS.md)
+
+## Run it locally
 
 ```bash
 git clone https://github.com/sillanaresh/lumen.git
@@ -56,50 +88,22 @@ cd lumen
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000`.
+Open `http://localhost:8000`. (A server is required — the app uses ES modules and fetches `benchmark.json`.)
 
-You can also open `index.html` directly, but a local server is better for browser module/CDN behavior.
+- Tests: open `http://localhost:8000/test.html` — 23 checks on the pure pipeline.
+- Manual walkthrough: [`TESTING.md`](TESTING.md)
 
 ## Deploy
 
-### GitHub Pages
-
-This repo is already shaped for GitHub Pages because it is a static `index.html`.
-
-### Vercel
-
-Vercel can deploy this as a static project:
-
-1. Import the GitHub repo in Vercel.
-2. Framework preset: **Other**.
-3. Build command: leave empty.
-4. Output directory: `.`.
-
-`vercel.json` is included for clean static headers.
-
-## Tech
-
-| Area | Choice |
-|---|---|
-| Build | Single `index.html`, zero build step |
-| UI | Tailwind CDN, Inter, JetBrains Mono |
-| Graph | D3 force-directed graph |
-| Markdown | Marked.js |
-| Search | Fuse.js plus local lexical/semantic scoring |
-| Embeddings | transformers.js MiniLM in the browser |
-| Q&A | OpenRouter BYOK, streaming responses |
-| Ingest | pdf.js for local PDF text extraction, `r.jina.ai` for URL reader mode |
-| Storage | `localStorage` for notes/settings, IndexedDB for embeddings/eval runs |
-
-## Testing
-
-Manual walkthrough: [`TESTING.md`](TESTING.md)  
-Tiny zero-dep test runner: open [`test.html`](test.html)
+- **GitHub Pages:** serve the repo root. Already live.
+- **Vercel:** import the repo, framework preset *Other*, no build command, output directory `.`. [`vercel.json`](vercel.json) sets clean static headers.
 
 ## Roadmap
 
-- Generation evals: citation precision, LLM-as-judge faithfulness, and no-answer answer judging.
-- Compare view for multiple saved eval runs.
-- Optional folder sync via a user-owned local/cloud folder.
+- Generation-quality evals: citation precision + LLM-as-judge faithfulness, run from the Eval Lab with your key (`citationPrecision` already ships in `pipeline.js`).
+- Benchmark cases over imported PDFs — long-document retrieval is where chunking earns its keep.
+- Optional sync to a user-owned folder, keeping the no-server promise.
 
-MIT License.
+---
+
+Built by [Naresh Silla](https://github.com/sillanaresh) as an AI product portfolio project. MIT License.

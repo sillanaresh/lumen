@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumen tests</title>
+<body style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0e14; color:#e6e9f0; padding:24px;">
+<h1>Lumen tests</h1>
+<pre id="out">Running...</pre>
+<script>
+const CHUNK_SIZE_CHARS = 1200;
+const CHUNK_OVERLAP = 0.15;
+const STOPWORDS = new Set(['the','and','for','that','with','from','this','what','when','where','why','how','study','learning','learn']);
+
+function contentHash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+function stripMarkdownForRetrieval(s) {
+  return String(s).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[#>*_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function normalizeTokens(s) {
+  return (String(s).toLowerCase().match(/[a-z0-9]+/g) || []).filter(t => t.length > 2 && !STOPWORDS.has(t));
+}
+function lexicalScore(query, body, title = '', tags = []) {
+  const qTokens = Array.from(new Set(normalizeTokens(query)));
+  if (qTokens.length === 0) return 0;
+  const bodyText = stripMarkdownForRetrieval(body).toLowerCase();
+  const titleText = String(title).toLowerCase();
+  const tagText = tags.join(' ').toLowerCase();
+  const bodyTokens = new Set(normalizeTokens(bodyText));
+  let score = 0;
+  for (const token of qTokens) {
+    if (titleText.includes(token)) score += 2.6;
+    if (tagText.includes(token)) score += 1.8;
+    if (bodyTokens.has(token)) score += 1;
+    if (bodyText.includes(token)) score += 0.25;
+  }
+  return score / Math.max(3, qTokens.length);
+}
+function splitSentences(text) {
+  return String(text).trim().split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+}
+function hardSplitText(text, maxChars = CHUNK_SIZE_CHARS) {
+  const chunks = [];
+  let cur = '';
+  for (const sentence of splitSentences(text)) {
+    if ((cur + ' ' + sentence).trim().length > maxChars && cur.trim()) { chunks.push(cur.trim()); cur = sentence; }
+    else cur = (cur ? cur + ' ' : '') + sentence;
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
+function markdownBlocks(content, fallbackHeading) {
+  const blocks = [];
+  let heading = fallbackHeading;
+  let buffer = [];
+  const flush = () => { const text = buffer.join('\n').trim(); if (text) blocks.push({ text, headingPath: heading }); buffer = []; };
+  for (const line of String(content).split('\n')) {
+    const h = line.match(/^#{1,4}\s+(.+)$/);
+    if (h) { flush(); heading = h[1]; }
+    else if (!line.trim()) flush();
+    else buffer.push(line);
+  }
+  flush();
+  if (!blocks.length) blocks.push({ text: fallbackHeading, headingPath: fallbackHeading });
+  return blocks;
+}
+function chunkNote(note) {
+  const blocks = markdownBlocks(note.content, note.title);
+  const chunks = [];
+  let cur = '';
+  let headingPath = note.title;
+  for (const block of blocks) {
+    for (const part of block.text.length > CHUNK_SIZE_CHARS ? hardSplitText(block.text) : [block.text]) {
+      if ((cur + '\n\n' + part).trim().length > CHUNK_SIZE_CHARS && cur.trim()) {
+        chunks.push({ text: cur.trim(), headingPath });
+        cur = part;
+      } else {
+        cur = (cur ? cur + '\n\n' : '') + part;
+      }
+      headingPath = block.headingPath;
+    }
+  }
+  if (cur.trim()) chunks.push({ text: cur.trim(), headingPath });
+  return chunks.map((chunk, i) => ({ chunkId: `${note.id}.${i + 1}`, contentHash: contentHash(chunk.text), ...chunk }));
+}
+
+const tests = [];
+function test(name, fn) { tests.push({ name, fn }); }
+function assert(value, message) { if (!value) throw new Error(message || 'assertion failed'); }
+
+test('short note creates one stable chunk', () => {
+  const chunks = chunkNote({ id: 'n01', title: 'A', content: '# A\n\nSmall body.' });
+  assert(chunks.length === 1, 'expected one chunk');
+  assert(chunks[0].chunkId === 'n01.1', 'expected chunk id n01.1');
+});
+test('long note splits at sentence boundaries', () => {
+  const content = '# Long\n\n' + Array.from({ length: 80 }, (_, i) => `Sentence ${i} teaches retrieval practice.`).join(' ');
+  const chunks = chunkNote({ id: 'n02', title: 'Long', content });
+  assert(chunks.length > 1, 'expected multiple chunks');
+});
+test('heading-only note never creates empty chunks', () => {
+  const chunks = chunkNote({ id: 'n03', title: 'Only heading', content: '# Only heading' });
+  assert(chunks.length === 1, 'expected fallback chunk');
+  assert(chunks[0].text.length > 0, 'expected non-empty text');
+});
+test('markdown stripper removes links and marks', () => {
+  assert(stripMarkdownForRetrieval('**Hi** [there](https://x.test)') === 'Hi there', 'strip failed');
+});
+test('lexical scoring favors expected terms', () => {
+  const score = lexicalScore('active recall memory', 'Active recall strengthens memory traces.', 'Active recall', ['memory']);
+  assert(score > 1, 'score too low');
+});
+test('unrelated lexical score is low', () => {
+  const score = lexicalScore('kubernetes oauth taxes', 'Active recall strengthens memory traces.', 'Active recall', ['memory']);
+  assert(score === 0, 'expected no lexical overlap');
+});
+test('content hash changes when text changes', () => {
+  assert(contentHash('a') !== contentHash('b'), 'hash should change');
+});
+test('heading path follows latest heading', () => {
+  const chunks = chunkNote({ id: 'n04', title: 'Root', content: '# Root\n\nIntro\n\n## Method\n\nBody' });
+  assert(chunks.some(c => c.headingPath === 'Method'), 'expected Method heading path');
+});
+test('empty body falls back to title', () => {
+  const chunks = chunkNote({ id: 'n05', title: 'Fallback', content: '' });
+  assert(chunks[0].text === 'Fallback', 'expected title fallback');
+});
+test('links keep readable anchor text', () => {
+  assert(stripMarkdownForRetrieval('[OpenAI](https://openai.com)').includes('OpenAI'), 'expected link text');
+});
+test('inline code keeps code text', () => {
+  assert(stripMarkdownForRetrieval('Use `retrieval` carefully') === 'Use retrieval carefully', 'expected inline code text');
+});
+test('chunk ids increment monotonically', () => {
+  const content = '# Many\n\n' + Array.from({ length: 100 }, (_, i) => `Sentence ${i} has evidence.`).join(' ');
+  const chunks = chunkNote({ id: 'n06', title: 'Many', content });
+  assert(chunks.every((c, i) => c.chunkId === `n06.${i + 1}`), 'expected monotonic ids');
+});
+
+let pass = 0;
+let output = '';
+for (const t of tests) {
+  try { t.fn(); pass++; output += `PASS ${t.name}\n`; }
+  catch (err) { output += `FAIL ${t.name}: ${err.message}\n`; }
+}
+output += `\n${pass}/${tests.length} passed`;
+document.getElementById('out').textContent = output;
+</script>
+</body>
+</html>

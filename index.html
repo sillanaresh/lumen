@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Lumen — a second brain that never leaves your browser</title>
-<meta name="description" content="Lumen is a local-first knowledge graph. Your notes, visualized and connected — and they never leave your browser." />
+<title>Lumen — private notes AI with visible evals</title>
+<meta name="description" content="Lumen is a local-first knowledge graph with transparent RAG, source-linked answers, and a built-in retrieval eval lab." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307080b'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ffd166'/%3E%3Cpath d='M16 5v4M16 23v4M5 16h4M23 16h4' stroke='%237dd3fc' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,6 +14,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
 <script>
@@ -172,6 +174,7 @@
     transition: transform 0.1s ease, background 0.15s ease;
   }
   .btn-primary:hover { background: #ffe29a; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
   .btn-ghost {
     background: transparent; color: #c5cbda;
     padding: 0.5rem 0.85rem; border-radius: 0.55rem; font-size: 0.875rem; font-weight: 500;
@@ -179,6 +182,16 @@
     transition: background 0.15s ease, color 0.15s ease;
   }
   .btn-ghost:hover { background: #11141b; color: #e7eaf2; }
+  .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 2px;
+  }
 
   /* Active tab */
   .tab-active { background: #181c26; color: #e7eaf2; }
@@ -222,6 +235,34 @@
   .citation-chip:hover { background: rgba(255, 209, 102, 0.22); transform: translateY(-1px); }
   .ask-answer { min-height: 2em; }
 
+  .metric-panel {
+    border: 1px solid #232836;
+    background: #11141b;
+    border-radius: 0.75rem;
+    padding: 1rem;
+  }
+  .metric-value { font-size: 1.625rem; line-height: 1; font-weight: 750; letter-spacing: -0.015em; }
+  .metric-label { margin-top: 0.35rem; font-size: 0.7rem; color: #8b94ab; font-family: 'JetBrains Mono', monospace; }
+  .quality-row-pass { border-color: rgba(134,239,172,0.28); background: rgba(134,239,172,0.045); }
+  .quality-row-warn { border-color: rgba(255,209,102,0.26); background: rgba(255,209,102,0.045); }
+  .quality-row-fail { border-color: rgba(248,113,113,0.24); background: rgba(248,113,113,0.045); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  @media (max-width: 767px) {
+    .mobile-hide-graph { display: none; }
+    .mobile-read-banner { display: flex; }
+  }
+  @media (min-width: 768px) {
+    .mobile-read-banner { display: none; }
+  }
+
   /* Hero floating nodes animation */
   @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(8px,-6px); } }
   @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-6px,8px); } }
@@ -245,11 +286,12 @@
         <div class="absolute inset-0 w-7 h-7 rounded-full bg-accent-500 opacity-30 blur-md"></div>
       </div>
       <span class="font-bold text-lg tracking-tight">Lumen</span>
-      <span class="text-ink-400 text-xs ml-1 font-mono">v0.4</span>
+      <span class="text-ink-400 text-xs ml-1 font-mono">v0.5</span>
     </div>
     <div class="hidden md:flex items-center gap-6 text-sm text-ink-300">
       <a href="#app" class="hover:text-ink-100 transition">Try it</a>
       <a href="#how" class="hover:text-ink-100 transition">How it works</a>
+      <a href="#eval" class="hover:text-ink-100 transition">Quality</a>
       <a href="#roadmap" class="hover:text-ink-100 transition">Roadmap</a>
       <a href="https://github.com/sillanaresh/lumen" target="_blank" class="hover:text-ink-100 transition">GitHub</a>
     </div>
@@ -258,23 +300,23 @@
 
   <div class="relative max-w-7xl mx-auto px-6 pt-16 pb-24 md:pt-24 md:pb-32 z-10">
     <div class="max-w-3xl">
-      <div class="inline-flex items-center gap-2 text-xs font-medium tracking-wider uppercase text-ink-300 mb-6 border border-ink-600 rounded-full px-3 py-1.5">
+      <div class="inline-flex items-center gap-2 text-xs font-medium text-ink-300 mb-6 border border-ink-600 rounded-full px-3 py-1.5">
         <span class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
-        Local-first · Private by default · Free
+        Local-first RAG, with receipts
       </div>
       <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.02] mb-6">
-        Your notes,<br/>
-        <span class="bg-gradient-to-r from-accent-500 via-accent-400 to-pulse-500 bg-clip-text text-transparent">smarter.</span>
+        Private notes AI,<br/>
+        measured in the open.
       </h1>
       <p class="text-lg md:text-xl text-ink-200 leading-relaxed mb-8 max-w-2xl">
-        A second brain that never leaves your browser. Drop notes in. Watch them connect. Ask questions across everything you've ever written.
+        Lumen maps your notes, retrieves source passages before answering, and ships with a 58-case eval set so prompt and retrieval changes can be judged instead of guessed.
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href="#app" class="btn-primary">Explore the demo →</a>
-        <a href="#how" class="btn-ghost">How it works</a>
+        <a href="#app" class="btn-primary">Explore the demo</a>
+        <a href="#eval" class="btn-ghost">Open Quality Lab</a>
       </div>
       <p class="text-xs text-ink-400 mt-6 font-mono">
-        Everything you see below runs entirely in your browser. No account. No server. No data collected.
+        Notes, embeddings, eval runs, and API keys stay in this browser. No account. No Lumen server. No tracking.
       </p>
     </div>
 
@@ -310,19 +352,19 @@
   <!-- Feature triad -->
   <div id="how" class="relative max-w-7xl mx-auto px-6 pb-24 grid md:grid-cols-3 gap-4 z-10">
     <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
-      <div class="text-accent-500 text-xs font-mono tracking-widest mb-3">01 · VISUAL</div>
+      <div class="text-accent-500 text-xs font-mono mb-3">Graph</div>
       <h3 class="text-xl font-semibold mb-2">A map of your thinking</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Every note becomes a node. Shared ideas form edges. The longer you use Lumen, the more connected your knowledge becomes — visibly.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Every note becomes a node. Tag and semantic links make clusters visible, so the workspace is understandable before the assistant speaks.</p>
     </div>
     <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
-      <div class="text-pulse-500 text-xs font-mono tracking-widest mb-3">02 · PRIVATE</div>
-      <h3 class="text-xl font-semibold mb-2">Nothing leaves your browser</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Notes live in your browser's storage. No server, no sync, no tracking. Your second brain stays yours — truly yours.</p>
+      <div class="text-pulse-500 text-xs font-mono mb-3">RAG</div>
+      <h3 class="text-xl font-semibold mb-2">Context before answers</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Ask retrieves passage-sized evidence, shows exactly what will be sent, and requires citations back to source notes.</p>
     </div>
     <div class="rounded-xl border border-ink-600 bg-ink-900/70 p-6 grad-border">
-      <div class="text-accent-500 text-xs font-mono tracking-widest mb-3">03 · INSTANT</div>
-      <h3 class="text-xl font-semibold mb-2">No install. No account.</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Open the tab and start writing. Export anytime. Works offline after first load. Free forever.</p>
+      <div class="text-accent-500 text-xs font-mono mb-3">Evals</div>
+      <h3 class="text-xl font-semibold mb-2">Quality is testable</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">The built-in eval suite compares old note-level retrieval with the passage-level system and reports hit rate, MRR, and failures.</p>
     </div>
   </div>
 </section>
@@ -331,9 +373,9 @@
 <section id="app" class="relative max-w-7xl mx-auto px-6 pb-8">
   <div class="flex items-end justify-between mb-6">
     <div>
-      <div class="text-xs font-mono tracking-widest text-accent-500 mb-2">LIVE DEMO</div>
+      <div class="text-xs font-mono text-accent-500 mb-2">LIVE DEMO</div>
       <h2 class="text-3xl md:text-4xl font-bold tracking-tight">Explore a seeded workspace</h2>
-      <p class="text-ink-300 mt-2 max-w-2xl">Pre-loaded with 12 notes on <em class="text-pulse-500 not-italic">how to learn effectively</em>. Click any node. Add your own. Everything stays in your browser.</p>
+      <p class="text-ink-300 mt-2 max-w-2xl">Pre-loaded with 12 notes on <em class="text-pulse-500 not-italic">how to learn effectively</em>. Click nodes, ask cited questions, then run the eval suite to see what retrieval actually found.</p>
     </div>
   </div>
 
@@ -358,6 +400,12 @@
           <span class="inline-flex items-center gap-1.5">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
             Ask
+          </span>
+        </button>
+        <button id="tab-evals" class="px-3 py-1.5 rounded-md text-sm font-medium text-ink-300">
+          <span class="inline-flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="5"/><rect x="12" y="7" width="3" height="9"/><rect x="17" y="9" width="3" height="7"/></svg>
+            Evals
           </span>
         </button>
       </div>
@@ -399,6 +447,10 @@
 
     <!-- App content (two modes: graph and notes) -->
     <div class="relative" style="height: min(72vh, 720px);">
+      <div class="mobile-read-banner absolute top-0 inset-x-0 z-30 items-center gap-2 border-b border-ink-700 bg-ink-900 px-4 py-2 text-xs text-ink-300">
+        <span class="w-1.5 h-1.5 rounded-full bg-pulse-500"></span>
+        Mobile read mode: Notes and Ask work best here; graph editing is designed for desktop.
+      </div>
 
       <!-- GRAPH MODE -->
       <div id="view-graph" class="absolute inset-0">
@@ -416,7 +468,12 @@
           </div>
           <div class="text-xs text-ink-400 pointer-events-none hidden md:block">drag · scroll · click</div>
         </div>
-        <svg id="graph-svg"></svg>
+        <svg id="graph-svg" class="mobile-hide-graph"></svg>
+        <div class="md:hidden absolute inset-0 pt-16 px-5">
+          <div class="rounded-xl border border-ink-700 bg-ink-900 p-4 text-sm text-ink-300">
+            The graph is available on tablet and desktop. Use the Notes or Ask tabs on mobile to read the corpus and inspect retrieval.
+          </div>
+        </div>
         <!-- Hover preview card -->
         <div id="hover-card" class="absolute hidden z-20 max-w-xs p-3 rounded-lg border border-ink-600 bg-ink-800 shadow-xl pointer-events-none fade-in">
           <div id="hover-title" class="text-sm font-semibold text-ink-100 mb-1"></div>
@@ -528,6 +585,61 @@
         </div>
       </div>
 
+      <!-- EVALS MODE -->
+      <div id="view-evals" class="absolute inset-0 hidden overflow-y-auto bg-ink-950">
+        <div id="quality" class="max-w-5xl mx-auto px-6 md:px-10 py-8">
+          <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5 mb-6">
+            <div class="max-w-2xl">
+              <div class="text-xs font-mono text-accent-500 mb-2">QUALITY LAB</div>
+              <h3 class="text-2xl md:text-3xl font-bold tracking-tight">Measure retrieval before trusting answers</h3>
+              <p class="text-ink-300 mt-2 text-sm leading-relaxed">
+                Lumen ships with 50+ hand-written questions mapped to expected source notes, including no-answer cases. Run the suite to compare the old note-level retriever with the newer passage-level retriever used by Ask.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="eval-run-lexical" class="btn-primary text-xs">Run fast eval</button>
+              <button id="eval-run-semantic" class="btn-ghost text-xs">Run semantic eval</button>
+              <button id="eval-export-json" class="btn-ghost text-xs">Export JSON</button>
+              <button id="eval-export-md" class="btn-ghost text-xs">Export Markdown</button>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-4 gap-3 mb-5">
+            <div class="metric-panel">
+              <div id="eval-hit1" class="metric-value text-ink-100">—</div>
+              <div class="metric-label">Passage hit@1</div>
+            </div>
+            <div class="metric-panel">
+              <div id="eval-hit5" class="metric-value text-ink-100">—</div>
+              <div class="metric-label">Passage hit@5</div>
+            </div>
+            <div class="metric-panel">
+              <div id="eval-mrr" class="metric-value text-ink-100">—</div>
+              <div class="metric-label">Mean reciprocal rank</div>
+            </div>
+            <div class="metric-panel">
+              <div id="eval-delta" class="metric-value text-ink-100">—</div>
+              <div class="metric-label">Hit@5 lift vs notes</div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-ink-700 bg-ink-900 overflow-hidden">
+            <div class="px-4 py-3 border-b border-ink-700 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <div id="eval-summary" class="text-sm text-ink-200 font-medium">Run an eval to generate a report in this browser.</div>
+                <div id="eval-detail" class="text-xs text-ink-400 mt-1">Fast eval uses lexical scoring. Semantic eval loads MiniLM locally and blends cosine similarity with lexical matches.</div>
+              </div>
+              <div id="eval-status" class="text-[11px] font-mono text-ink-400">benchmark ready · no data leaves this page</div>
+            </div>
+            <div id="eval-results" class="divide-y divide-ink-800">
+              <div class="p-5 text-sm text-ink-400">
+                The report highlights misses so retrieval changes can be debugged like product quality issues, not argued about anecdotally.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -562,7 +674,7 @@
         <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.2</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">In-browser semantic search</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Real sentence embeddings (MiniLM-L6-v2) run <em class="text-pulse-500 not-italic">in your browser</em>. Toggle to "Semantic" in the graph to see meaning-based connections — no data leaves your machine.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Real sentence embeddings (MiniLM-L6-v2) run <em class="text-pulse-500 not-italic">in your browser</em>. Toggle to "Semantic" in the graph to see meaning-based connections from local vectors.</p>
     </div>
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
@@ -580,16 +692,16 @@
         <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.4</div>
       </div>
       <h3 class="text-lg font-semibold mb-2">Ingest anything</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF or paste a URL. Lumen extracts the text in your browser (PDFs never leave your machine), embeds the new content, and weaves it into your graph instantly.</p>
+      <p class="text-ink-300 text-sm leading-relaxed">Drop a PDF or paste a URL. PDFs are parsed locally; URLs are fetched through r.jina.ai. New content is chunked, embedded, and woven into your graph.</p>
     </div>
 
     <div class="rounded-xl border border-ink-600 bg-ink-900 p-6">
       <div class="flex items-center gap-2 mb-2">
-        <span class="w-2 h-2 rounded-full bg-pulse-500"></span>
-        <div class="text-xs font-mono tracking-wider text-pulse-500">NEXT · v0.5</div>
+        <span class="w-2 h-2 rounded-full bg-accent-500"></span>
+        <div class="text-xs font-mono tracking-wider text-accent-500">SHIPPED · v0.5</div>
       </div>
-      <h3 class="text-lg font-semibold mb-2">Bring your own folder</h3>
-      <p class="text-ink-300 text-sm leading-relaxed">Optional sync via a Dropbox or iCloud folder you choose. Your notes stay yours — Lumen still stores nothing on our side.</p>
+      <h3 class="text-lg font-semibold mb-2">Quality Lab</h3>
+      <p class="text-ink-300 text-sm leading-relaxed">Chunked retrieval, inspectable prompts, local feedback, and a public benchmark that compares chunk retrieval against the older whole-note baseline.</p>
     </div>
   </div>
 </section>
@@ -602,14 +714,34 @@
       <span>Lumen · built as a portfolio project</span>
     </div>
     <div class="flex items-center gap-4 text-xs font-mono">
-      <span>v0.4</span>
+      <span>v0.5</span>
       <span>·</span>
-      <span>zero servers</span>
+      <span>static app</span>
       <span>·</span>
       <span>zero tracking</span>
     </div>
   </div>
 </footer>
+
+<!-- =============== ONBOARDING =============== -->
+<div id="onboarding-modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
+  <div class="w-full max-w-lg rounded-2xl border border-ink-600 bg-ink-900 shadow-2xl fade-in">
+    <div class="p-6">
+      <div id="onboarding-step-label" class="text-xs font-mono text-accent-500 mb-2">STEP 1 OF 3</div>
+      <h3 id="onboarding-title" class="text-2xl font-bold tracking-tight mb-2">This is your graph</h3>
+      <p id="onboarding-body" class="text-sm text-ink-300 leading-relaxed mb-5">
+        Notes are dots. Shared ideas are lines. Click any node to read the note and inspect its connections.
+      </p>
+      <div class="rounded-xl border border-ink-700 bg-ink-950 p-4 mb-5">
+        <div id="onboarding-preview" class="text-sm text-ink-200">Try the seeded workspace first. Your own notes stay in this browser.</div>
+      </div>
+      <div class="flex justify-between gap-3">
+        <button id="onboarding-skip" class="btn-ghost text-xs">Skip tour</button>
+        <button id="onboarding-next" class="btn-primary text-xs">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- =============== SETTINGS MODAL =============== -->
 <div id="settings-modal" class="fixed inset-0 z-50 hidden backdrop items-center justify-center p-4">
@@ -637,6 +769,27 @@
           <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B (free) — fastest</option>
         </select>
         <p class="text-[11px] text-ink-400 mt-1.5">All options are free tier; rate-limited by OpenRouter.</p>
+      </div>
+      <div class="pt-2 border-t border-ink-700">
+        <div class="text-xs font-medium text-ink-200 mb-2">What leaves your machine</div>
+        <ul class="text-[11px] text-ink-400 leading-relaxed space-y-1">
+          <li>Ask: only the retrieved chunks shown in the inspector are sent to OpenRouter with your API key.</li>
+          <li>URL import: the URL you paste is sent to r.jina.ai to fetch a readable copy.</li>
+          <li>PDF import, notes, embeddings, eval runs, and feedback stay in this browser unless you export or send them.</li>
+        </ul>
+      </div>
+      <div class="pt-2 border-t border-ink-700">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-medium text-ink-200">Feedback drawer</div>
+            <p id="settings-feedback-count" class="text-[11px] text-ink-400 mt-1">No feedback saved yet.</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="settings-export-feedback" class="btn-ghost text-xs">Export JSON</button>
+            <button id="settings-send-feedback" class="btn-ghost text-xs">Send to maker</button>
+          </div>
+        </div>
+        <p class="text-[11px] text-ink-400 mt-2">Send opens a GitHub issue draft. You see everything before posting, and API keys are never included.</p>
       </div>
       <div class="pt-2 border-t border-ink-700">
         <button id="settings-clear-cache" class="text-xs text-ink-300 hover:text-ink-100">Clear embedding cache</button>
@@ -703,7 +856,7 @@
         <label id="ingest-dropzone" for="ingest-file" class="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-ink-600 rounded-xl p-8 text-center cursor-pointer hover:border-accent-500/60 hover:bg-ink-800/40 transition">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffd166" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
           <div class="text-sm text-ink-200 font-medium">Drop a PDF, or click to choose</div>
-          <div class="text-[11px] text-ink-400">Parsed in your browser — the file never leaves your machine.</div>
+          <div class="text-[11px] text-ink-400">Parsed in your browser. The file is not uploaded by Lumen.</div>
           <input id="ingest-file" type="file" accept="application/pdf,.pdf" class="hidden" />
         </label>
       </div>
@@ -1017,51 +1170,154 @@ Pairs with: **the Feynman technique**, **curiosity-driven learning**.`
   },
 ];
 
+// ---------- Built-in retrieval eval set ----------
+const EVAL_CASES = [
+  { id: 'e01', question: 'Why is rereading weaker than testing yourself from memory?', expected: ['n01'], rubric: 'Should retrieve active recall and familiarity vs memory.' },
+  { id: 'e02', question: 'What should I do after a lecture if I want to remember it?', expected: ['n01'], rubric: 'Should retrieve active recall practice steps.' },
+  { id: 'e03', question: 'How do I turn textbook headings into a study method?', expected: ['n01'], rubric: 'Should retrieve heading-to-question active recall.' },
+  { id: 'e04', question: 'What is the link between flashcards and memory traces?', expected: ['n01', 'n02'], rubric: 'Should retrieve retrieval practice and spaced repetition.' },
+  { id: 'e05', question: 'Why should I wait until I am almost forgetting before reviewing?', expected: ['n02'], rubric: 'Should retrieve spaced repetition and forgetting curve.' },
+  { id: 'e06', question: 'What review intervals are suggested for long term retention?', expected: ['n02'], rubric: 'Should retrieve spaced repetition intervals.' },
+  { id: 'e07', question: 'Why does spaced repetition feel uncomfortable?', expected: ['n02'], rubric: 'Should retrieve edge-of-forgetting discomfort.' },
+  { id: 'e08', question: 'What tool pattern adjusts review timing for you?', expected: ['n02'], rubric: 'Should retrieve Anki, RemNote, or Mochi mention.' },
+  { id: 'e09', question: 'How can I find gaps in my understanding by explaining simply?', expected: ['n03'], rubric: 'Should retrieve the Feynman technique.' },
+  { id: 'e10', question: 'Why is jargon dangerous when learning a concept?', expected: ['n03'], rubric: 'Should retrieve jargon as understanding debt.' },
+  { id: 'e11', question: 'What are the four steps of the Feynman technique?', expected: ['n03'], rubric: 'Should retrieve the four-step section.' },
+  { id: 'e12', question: 'What should I do when I get stuck during a plain-language explanation?', expected: ['n03'], rubric: 'Should retrieve gap identification and source review.' },
+  { id: 'e13', question: 'What makes practice deliberate instead of just more hours?', expected: ['n04'], rubric: 'Should retrieve specific goals, feedback, attention, repetition.' },
+  { id: 'e14', question: 'Why is the 10000 hours idea incomplete?', expected: ['n04'], rubric: 'Should retrieve quality of practice over hours.' },
+  { id: 'e15', question: 'How should a practice session feel if I am actually improving?', expected: ['n04'], rubric: 'Should retrieve productive discomfort zone.' },
+  { id: 'e16', question: 'What ingredients are needed for skill improvement with feedback?', expected: ['n04'], rubric: 'Should retrieve deliberate practice ingredients.' },
+  { id: 'e17', question: 'Why do mixed problem sets help more than blocked drills?', expected: ['n05'], rubric: 'Should retrieve interleaving vs blocking.' },
+  { id: 'e18', question: 'What is the difference between blocking and interleaving?', expected: ['n05'], rubric: 'Should retrieve definitions of both methods.' },
+  { id: 'e19', question: 'Why does alternating problem types feel worse but test better?', expected: ['n05'], rubric: 'Should retrieve interleaving discomfort and transfer.' },
+  { id: 'e20', question: 'How does interleaving help when real problems arrive out of order?', expected: ['n05'], rubric: 'Should retrieve deciding which tool to use.' },
+  { id: 'e21', question: 'Why are mental models better than memorizing isolated facts?', expected: ['n06'], rubric: 'Should retrieve facts are slippery, models are sticky.' },
+  { id: 'e22', question: 'What are examples of mental models worth keeping?', expected: ['n06'], rubric: 'Should retrieve supply demand, compounding, incentives, second-order effects.' },
+  { id: 'e23', question: 'How do models help me regenerate facts on demand?', expected: ['n06'], rubric: 'Should retrieve retrieval scaffolds.' },
+  { id: 'e24', question: 'How can I tell when an explanation is useful across domains?', expected: ['n06'], rubric: 'Should retrieve collecting models across domains.' },
+  { id: 'e25', question: 'Why is forgetting not necessarily a failure?', expected: ['n07'], rubric: 'Should retrieve forgetting as filtering signal from noise.' },
+  { id: 'e26', question: 'What did Ebbinghaus show about what happens after 24 hours?', expected: ['n07'], rubric: 'Should retrieve forgetting curve.' },
+  { id: 'e27', question: 'How should I work with forgetting instead of fighting it?', expected: ['n07', 'n02'], rubric: 'Should retrieve spacing, retrieval, connection.' },
+  { id: 'e28', question: 'Why would perfect memory make recall worse?', expected: ['n07'], rubric: 'Should retrieve filter not hard drive idea.' },
+  { id: 'e29', question: 'Why does curiosity make learning cheaper?', expected: ['n08'], rubric: 'Should retrieve curiosity as cheapest attention.' },
+  { id: 'e30', question: 'What should I do when something surprises me while studying?', expected: ['n08'], rubric: 'Should retrieve follow threads and chase surprises.' },
+  { id: 'e31', question: 'How does reading widely help learning by analogy?', expected: ['n08'], rubric: 'Should retrieve odd domains produce analogies.' },
+  { id: 'e32', question: 'What list should I keep to bring curiosity into study?', expected: ['n08'], rubric: 'Should retrieve questions I would love to answer.' },
+  { id: 'e33', question: 'Why is sleep important after studying?', expected: ['n09'], rubric: 'Should retrieve sleep and consolidation.' },
+  { id: 'e34', question: 'What happens in the hippocampus during slow wave sleep?', expected: ['n09'], rubric: 'Should retrieve replay and long-term storage.' },
+  { id: 'e35', question: 'Why might an all-nighter hurt exam performance?', expected: ['n09'], rubric: 'Should retrieve sleep deprivation and weaker exam brain.' },
+  { id: 'e36', question: 'How can REM sleep change how new memories connect?', expected: ['n09'], rubric: 'Should retrieve linking new memories to existing ones.' },
+  { id: 'e37', question: 'What is the minimum ritual for reading with a pen?', expected: ['n10'], rubric: 'Should retrieve underline, margin why, paragraph from memory.' },
+  { id: 'e38', question: 'How can I test whether a book taught me or only entertained me?', expected: ['n10'], rubric: 'Should retrieve explaining three arguments a week later.' },
+  { id: 'e39', question: 'Why is active reading slower but more productive?', expected: ['n10'], rubric: 'Should retrieve passive reading vs active learning.' },
+  { id: 'e40', question: 'What should I write in the margin when reading?', expected: ['n10'], rubric: 'Should retrieve why in three words.' },
+  { id: 'e41', question: 'Why can highlighted notes make me feel ready when I am not?', expected: ['n11'], rubric: 'Should retrieve illusion of competence.' },
+  { id: 'e42', question: 'What is the difference between familiarity and retrievability?', expected: ['n11'], rubric: 'Should retrieve metacognition bug.' },
+  { id: 'e43', question: 'How can I tell whether I truly know something right now?', expected: ['n11', 'n01'], rubric: 'Should retrieve explain it out loud in plain words.' },
+  { id: 'e44', question: 'What should readiness be based on instead of familiar feeling?', expected: ['n11'], rubric: 'Should retrieve reproduce it cold.' },
+  { id: 'e45', question: 'Why does learning in public accelerate feedback?', expected: ['n12'], rubric: 'Should retrieve internet correction and accountability.' },
+  { id: 'e46', question: 'How can teaching others become active recall?', expected: ['n12', 'n01'], rubric: 'Should retrieve writing or teaching as retrieval.' },
+  { id: 'e47', question: 'Do I need to be an expert before sharing what I learn?', expected: ['n12'], rubric: 'Should retrieve one week ahead of reader.' },
+  { id: 'e48', question: 'How does an audience improve clarity while learning?', expected: ['n12', 'n03'], rubric: 'Should retrieve simple language and Feynman link.' },
+  { id: 'e49', question: 'What study methods fight the illusion of competence?', expected: ['n01', 'n11', 'n05'], rubric: 'Should retrieve active recall, practice testing, interleaving.' },
+  { id: 'e50', question: 'Which notes explain why discomfort can be a sign that learning is working?', expected: ['n02', 'n04', 'n05'], rubric: 'Should retrieve spacing, deliberate practice, and interleaving discomfort.' },
+];
+const NO_ANSWER_EVAL_CASES = [
+  { id: 'e51', question: 'What is the capital of Finland?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to say the notes do not cover this.' },
+  { id: 'e52', question: 'How do I configure Kubernetes horizontal pod autoscaling?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to avoid inventing DevOps advice from study notes.' },
+  { id: 'e53', question: 'What did Marie Curie win her Nobel prizes for?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to say the notes do not contain the fact.' },
+  { id: 'e54', question: 'Which OpenRouter model is cheapest today?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to avoid answering from missing/current pricing data.' },
+  { id: 'e55', question: 'How should I file taxes as an independent contractor?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to avoid unsupported financial/legal guidance.' },
+  { id: 'e56', question: 'What is the best treatment for a sprained ankle?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to avoid medical advice from unrelated notes.' },
+  { id: 'e57', question: 'Who won the 2026 NBA Finals?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to say this is not in the notes.' },
+  { id: 'e58', question: 'How do I implement OAuth PKCE in a React app?', expected: [], category: 'no-answer', rubric: 'Correct behavior is to decline because the notes are about learning science.' },
+];
+const BENCHMARK_CASES = [...EVAL_CASES, ...NO_ANSWER_EVAL_CASES].map(c => ({
+  category: c.category || (c.expected.length > 1 ? 'multi-hop' : 'single-hop'),
+  difficulty: c.expected.length > 1 ? 'medium' : 'easy',
+  ...c,
+}));
+
 // ---------- State ----------
 const LS_KEY = 'lumen.userNotes.v1';
+const ONBOARDING_KEY = 'lumen.onboarding.v1';
+const FEEDBACK_KEY = 'lumen.feedback.v1';
+const CHUNK_SIZE_CHARS = 1200;
+const CHUNK_OVERLAP = 0.15;
+const DEFAULT_RETRIEVAL_CONFIG = { topK: 5, semanticWeight: 0.72, lexicalWeight: 0.28, minScore: 0.12 };
+const MODEL_PRICES_PER_1K = {
+  'meta-llama/llama-3.3-70b-instruct:free': 0,
+  'google/gemini-2.0-flash-exp:free': 0,
+  'deepseek/deepseek-chat-v3.1:free': 0,
+  'meta-llama/llama-3.1-8b-instruct:free': 0,
+};
 function loadUserNotes() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
 }
 function saveUserNotes(notes) { localStorage.setItem(LS_KEY, JSON.stringify(notes)); }
+function loadFeedback() {
+  try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '[]'); } catch { return []; }
+}
+function saveFeedback(items) { localStorage.setItem(FEEDBACK_KEY, JSON.stringify(items)); }
 
 let state = {
   notes: [],                // full merged list
+  passages: [],             // passage-level retrieval units
   filteredIds: null,        // array of ids, or null if no search
   selectedId: null,
-  mode: 'graph',            // 'graph' | 'notes'
+  mode: 'graph',            // 'graph' | 'notes' | 'ask' | 'evals'
   fuse: null,
   embeddings: new Map(),    // noteId -> Float32Array-like
+  passageEmbeddings: new Map(), // passageId -> Float32Array-like
   edgeMode: 'tags',         // 'tags' | 'semantic'
   aiState: 'idle',          // idle | loading | ready | error
+  lastEval: null,
+  highlightChunkId: null,
 };
 
-// ---------- Embedding cache (IndexedDB) ----------
+// ---------- IndexedDB persistence ----------
 const IDB_NAME = 'lumen';
-const IDB_STORE = 'embeddings';
+const IDB_VERSION = 2;
+const IDB_EMBEDDINGS = 'embeddings';
+const IDB_EVAL_RUNS = 'evalRuns';
 function idbOpen() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_EMBEDDINGS)) db.createObjectStore(IDB_EMBEDDINGS);
+      if (!db.objectStoreNames.contains(IDB_EVAL_RUNS)) db.createObjectStore(IDB_EVAL_RUNS);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-async function idbGet(key) {
+async function idbGet(store, key) {
   const db = await idbOpen();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(key);
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(key);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-async function idbSet(key, value) {
+async function idbSet(store, key, value) {
   const db = await idbOpen();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(value, key);
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbAll(store) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
   });
 }
 function contentHash(s) {
@@ -1083,12 +1339,26 @@ async function ensureEmbeddings() {
   for (const note of state.notes) {
     if (state.embeddings.has(note.id)) continue;
     const key = embedKey(note);
-    let vec = await idbGet(key).catch(() => null);
+    let vec = await idbGet(IDB_EMBEDDINGS, key).catch(() => null);
     if (!vec) {
       vec = await window.LumenAI.embed(note.title + '\n\n' + note.content);
-      await idbSet(key, vec).catch(() => {});
+      await idbSet(IDB_EMBEDDINGS, key, vec).catch(() => {});
     }
     state.embeddings.set(note.id, vec);
+  }
+}
+async function ensurePassageEmbeddings() {
+  if (!window.LumenAI) return;
+  await window.LumenAI.init();
+  for (const passage of state.passages) {
+    if (state.passageEmbeddings.has(passage.id)) continue;
+    const key = passageKey(passage);
+    let vec = await idbGet(IDB_EMBEDDINGS, key).catch(() => null);
+    if (!vec) {
+      vec = await window.LumenAI.embed(passage.searchable);
+      await idbSet(IDB_EMBEDDINGS, key, vec).catch(() => {});
+    }
+    state.passageEmbeddings.set(passage.id, vec);
   }
 }
 function cosine(a, b) {
@@ -1104,8 +1374,198 @@ function allTags() {
   return Array.from(s).sort();
 }
 
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'that', 'with', 'from', 'this', 'what', 'when', 'where', 'why', 'how',
+  'into', 'your', 'you', 'are', 'can', 'should', 'would', 'could', 'about', 'after', 'before',
+  'does', 'did', 'doing', 'than', 'then', 'them', 'they', 'their', 'while', 'because', 'instead',
+  'note', 'notes', 'study', 'learning', 'learn', 'method', 'methods',
+]);
+
+function stripMarkdownForRetrieval(s) {
+  return String(s)
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[#>*_\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeTokens(s) {
+  return (String(s).toLowerCase().match(/[a-z0-9]+/g) || [])
+    .filter(t => t.length > 2 && !STOPWORDS.has(t));
+}
+
+function lexicalScore(query, body, title = '', tags = []) {
+  const qTokens = Array.from(new Set(normalizeTokens(query)));
+  if (qTokens.length === 0) return 0;
+  const bodyText = stripMarkdownForRetrieval(body).toLowerCase();
+  const titleText = String(title).toLowerCase();
+  const tagText = (tags || []).join(' ').toLowerCase();
+  const bodyTokens = new Set(normalizeTokens(bodyText));
+  let score = 0;
+  for (const token of qTokens) {
+    if (titleText.includes(token)) score += 2.6;
+    if (tagText.includes(token)) score += 1.8;
+    if (bodyTokens.has(token)) score += 1;
+    if (bodyText.includes(token)) score += 0.25;
+  }
+  const phrase = String(query).toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (phrase.length > 10 && bodyText.includes(phrase)) score += 3;
+  return score / Math.max(3, qTokens.length);
+}
+
+function splitSentences(text) {
+  const clean = String(text).trim();
+  if (!clean) return [];
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    try {
+      return Array.from(new Intl.Segmenter('en', { granularity: 'sentence' }).segment(clean))
+        .map(s => s.segment.trim())
+        .filter(Boolean);
+    } catch { /* fallback below */ }
+  }
+  return clean.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+}
+
+function hardSplitText(text, maxChars = CHUNK_SIZE_CHARS) {
+  const sentences = splitSentences(text);
+  if (sentences.length === 0) return [];
+  const chunks = [];
+  let cur = '';
+  for (const sentence of sentences) {
+    if (sentence.length > maxChars) {
+      if (cur.trim()) chunks.push(cur.trim());
+      for (let i = 0; i < sentence.length; i += maxChars) chunks.push(sentence.slice(i, i + maxChars).trim());
+      cur = '';
+    } else if ((cur + ' ' + sentence).trim().length > maxChars && cur.trim()) {
+      chunks.push(cur.trim());
+      cur = sentence;
+    } else {
+      cur = (cur ? cur + ' ' : '') + sentence;
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
+
+function markdownBlocks(content, fallbackHeading) {
+  const blocks = [];
+  const headingStack = [fallbackHeading];
+  const lines = String(content || '').split('\n');
+  let buffer = [];
+  let inFence = false;
+  let fenceBuffer = [];
+
+  function flushBuffer() {
+    const text = buffer.join('\n').trim();
+    if (text) blocks.push({ text, headingPath: headingStack.filter(Boolean).join(' > ') || fallbackHeading });
+    buffer = [];
+  }
+
+  for (const line of lines) {
+    if (/^```/.test(line.trim())) {
+      if (!inFence) {
+        flushBuffer();
+        inFence = true;
+        fenceBuffer = [line];
+      } else {
+        fenceBuffer.push(line);
+        blocks.push({ text: fenceBuffer.join('\n').trim(), headingPath: headingStack.filter(Boolean).join(' > ') || fallbackHeading, code: true });
+        fenceBuffer = [];
+        inFence = false;
+      }
+      continue;
+    }
+    if (inFence) {
+      fenceBuffer.push(line);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushBuffer();
+      const level = heading[1].length;
+      headingStack.length = Math.max(1, level);
+      headingStack[level - 1] = heading[2].trim();
+      continue;
+    }
+    if (!line.trim()) {
+      flushBuffer();
+    } else {
+      buffer.push(line);
+    }
+  }
+  if (inFence && fenceBuffer.length) blocks.push({ text: fenceBuffer.join('\n').trim(), headingPath: headingStack.filter(Boolean).join(' > ') || fallbackHeading, code: true });
+  flushBuffer();
+  if (blocks.length === 0) blocks.push({ text: fallbackHeading, headingPath: fallbackHeading });
+  return blocks;
+}
+
+function chunkNote(note, options = {}) {
+  const target = options.size || CHUNK_SIZE_CHARS;
+  const overlapChars = Math.round(target * (options.overlap ?? CHUNK_OVERLAP));
+  const blocks = markdownBlocks(note.content, note.title);
+  const chunks = [];
+  let cur = { text: '', headingPath: blocks[0]?.headingPath || note.title };
+
+  function pushCurrent() {
+    if (!cur.text.trim()) return;
+    chunks.push({ text: cur.text.trim(), headingPath: cur.headingPath || note.title });
+    cur = { text: '', headingPath: note.title };
+  }
+
+  for (const block of blocks) {
+    const parts = block.text.length > target ? hardSplitText(block.text, target) : [block.text];
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      if (!cur.text.trim()) {
+        cur = { text: part.trim(), headingPath: block.headingPath };
+      } else if ((cur.text + '\n\n' + part).length <= target) {
+        cur.text += '\n\n' + part.trim();
+      } else {
+        pushCurrent();
+        const overlap = overlapChars > 0 && chunks.length ? chunks[chunks.length - 1].text.slice(-overlapChars).replace(/^\S+\s?/, '').trim() : '';
+        cur = { text: (overlap ? overlap + '\n\n' : '') + part.trim(), headingPath: block.headingPath };
+      }
+    }
+  }
+  pushCurrent();
+
+  return chunks.map((chunk, index) => {
+    const ordinal = index + 1;
+    const chunkId = `${note.id}.${ordinal}`;
+    const hash = contentHash(`${note.id}\n${chunk.headingPath}\n${chunk.text}`);
+    return {
+      id: chunkId,
+      chunkId,
+      noteId: note.id,
+      noteTitle: note.title,
+      ordinal,
+      headingPath: chunk.headingPath,
+      section: chunk.headingPath,
+      tags: note.tags || [],
+      text: chunk.text,
+      contentHash: hash,
+      searchable: `${note.title}\n${chunk.headingPath}\n${(note.tags || []).join(' ')}\n${chunk.text}`,
+    };
+  });
+}
+
+function buildPassages(notes) {
+  return notes.flatMap(note => chunkNote(note));
+}
+
+function passageKey(passage) {
+  return passage.contentHash || contentHash(passage.searchable);
+}
+
+function noteById(id) {
+  return state.notes.find(n => n.id === id);
+}
+
 function rebuild() {
   state.notes = [...SEED_NOTES, ...loadUserNotes()];
+  state.passages = buildPassages(state.notes);
   state.fuse = new Fuse(state.notes, {
     keys: ['title', 'content', 'tags'],
     threshold: 0.35,
@@ -1113,7 +1573,7 @@ function rebuild() {
   });
   // If the user has already opted into AI (model loading/ready), embed any new notes.
   if (window.LumenAI && window.LumenAI.state !== 'idle') {
-    ensureEmbeddings().then(() => {
+    Promise.all([ensureEmbeddings(), ensurePassageEmbeddings()]).then(() => {
       if (state.edgeMode === 'semantic' && state.mode === 'graph') {
         graphRendered = false;
         renderGraph();
@@ -1228,7 +1688,26 @@ function renderNoteViewer() {
     viewer.innerHTML = `<div class="text-ink-400 text-sm">Select a note to read it.</div>`;
     return;
   }
-  viewer.innerHTML = marked.parse(note.content);
+  const citedChunk = state.highlightChunkId
+    ? state.passages.find(p => p.chunkId === state.highlightChunkId && p.noteId === note.id)
+    : null;
+  const callout = citedChunk ? `
+    <div id="chunk-highlight" class="mb-5 rounded-xl border border-accent-500/40 bg-accent-500/10 p-4">
+      <div class="text-[10px] font-mono text-accent-500 mb-1">Cited chunk ${escapeHtml(citedChunk.chunkId)}</div>
+      <div class="text-sm font-semibold text-ink-100 mb-1">${escapeHtml(citedChunk.headingPath)}</div>
+      <div class="text-sm text-ink-200 leading-relaxed">${escapeHtml(stripMarkdownForRetrieval(citedChunk.text).slice(0, 320))}${citedChunk.text.length > 320 ? '…' : ''}</div>
+    </div>
+  ` : '';
+  viewer.innerHTML = callout + renderMarkdown(note.content);
+  if (citedChunk) {
+    setTimeout(() => document.getElementById('chunk-highlight')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+    setTimeout(() => {
+      if (state.highlightChunkId === citedChunk.chunkId) {
+        state.highlightChunkId = null;
+        renderNoteViewer();
+      }
+    }, 2400);
+  }
   renderConnections(note);
 }
 
@@ -1267,8 +1746,9 @@ function renderConnections(note) {
   }).join('');
 }
 
-function selectNote(id) {
+function selectNote(id, options = {}) {
   state.selectedId = id;
+  state.highlightChunkId = options.chunkId || null;
   setMode('notes');
   renderNoteList();
   renderNoteViewer();
@@ -1389,11 +1869,13 @@ function setMode(m) {
     graph: document.getElementById('tab-graph'),
     notes: document.getElementById('tab-notes'),
     ask: document.getElementById('tab-ask'),
+    evals: document.getElementById('tab-evals'),
   };
   const views = {
     graph: document.getElementById('view-graph'),
     notes: document.getElementById('view-notes'),
     ask: document.getElementById('view-ask'),
+    evals: document.getElementById('view-evals'),
   };
   for (const k of Object.keys(tabs)) {
     const active = (k === m);
@@ -1403,6 +1885,7 @@ function setMode(m) {
   }
   // view-ask uses flex column; re-apply display when shown
   views.ask.style.display = (m === 'ask') ? 'flex' : '';
+  views.evals.style.display = (m === 'evals') ? 'block' : '';
 
   if (m === 'graph') {
     if (!graphRendered) renderGraph();
@@ -1415,9 +1898,11 @@ function setMode(m) {
     updateAskModelHint();
     // Kick off embedding load in background (Ask needs embeddings for retrieval)
     if (window.LumenAI && window.LumenAI.state === 'idle') {
-      ensureEmbeddings().catch(err => console.error('[Lumen]', err));
+      ensurePassageEmbeddings().catch(err => console.error('[Lumen]', err));
     }
     setTimeout(() => document.getElementById('ask-input')?.focus(), 50);
+  } else if (m === 'evals') {
+    renderEvalHistory();
   }
 }
 
@@ -1541,16 +2026,66 @@ function updateAskModelHint() {
   if (hint) hint.textContent = s.apiKey ? s.model.split('/').pop() : 'no key set';
 }
 
-// ---------- Ask: retrieval ----------
-async function retrieveContext(question, topK = 5) {
-  await ensureEmbeddings();
-  const qvec = await window.LumenAI.embed(question);
-  const ranked = state.notes
-    .map(n => ({ note: n, score: cosine(qvec, state.embeddings.get(n.id) || []) }))
-    .filter(r => r.score > 0.15)
+// ---------- Retrieval ----------
+async function rankNotes(question, topK = 5, { semantic = false } = {}) {
+  let qvec = null;
+  if (semantic && window.LumenAI) {
+    await ensureEmbeddings();
+    qvec = await window.LumenAI.embed(question);
+  }
+  return state.notes
+    .map(note => {
+      const lexical = lexicalScore(question, note.content, note.title, note.tags);
+      const semanticScore = qvec ? cosine(qvec, state.embeddings.get(note.id) || []) : 0;
+      const score = qvec ? (semanticScore * 0.72 + Math.min(lexical, 1) * 0.28) : lexical;
+      return { note, score, lexical, semantic: semanticScore };
+    })
+    .filter(r => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
-  return ranked;
+}
+
+async function rankPassages(question, topK = 5, { semantic = false } = {}) {
+  let qvec = null;
+  if (semantic && window.LumenAI) {
+    await ensurePassageEmbeddings();
+    qvec = await window.LumenAI.embed(question);
+  }
+  return state.passages
+    .map(passage => {
+      const lexical = lexicalScore(question, passage.searchable, `${passage.noteTitle} ${passage.section}`, passage.tags);
+      const semanticScore = qvec ? cosine(qvec, state.passageEmbeddings.get(passage.id) || []) : 0;
+      const score = qvec ? (semanticScore * 0.72 + Math.min(lexical, 1) * 0.28) : lexical;
+      return { passage, note: noteById(passage.noteId), score, lexical, semantic: semanticScore };
+    })
+    .filter(r => r.note && r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+}
+
+async function retrieveContext(question, topK = 5) {
+  let ranked = [];
+  try {
+    ranked = await rankPassages(question, topK, { semantic: true });
+  } catch (err) {
+    console.warn('[Lumen] semantic passage retrieval fell back to lexical', err);
+    ranked = await rankPassages(question, topK, { semantic: false });
+  }
+  if (ranked.length > 0) return ranked;
+  const fallback = await rankNotes(question, topK, { semantic: false });
+  return fallback.map(({ note, score }) => ({
+    note,
+    score,
+    passage: {
+      id: `${note.id}:note`,
+      noteId: note.id,
+      noteTitle: note.title,
+      section: 'Full note fallback',
+      tags: note.tags || [],
+      text: note.content,
+      searchable: note.content,
+    },
+  }));
 }
 
 // ---------- Ask: stream from OpenRouter ----------
@@ -1592,62 +2127,161 @@ async function streamAnswer({ apiKey, model, messages, onToken }) {
   }
 }
 
+function estimateTokens(s) {
+  return Math.ceil(String(s || '').length / 4);
+}
+
+function estimateCost(model, inputTokens, outputTokens) {
+  const per1k = MODEL_PRICES_PER_1K[model] ?? 0;
+  return ((inputTokens + outputTokens) / 1000) * per1k;
+}
+
+function buildPrompt(question, contextItems) {
+  const contextBlocks = contextItems.map(({ passage, note }) => {
+    const body = stripMarkdownForRetrieval(passage.text).slice(0, 1000);
+    return `[${passage.chunkId}] Note: ${note.title}\nHeading: ${passage.headingPath}\nPassage: ${body}`;
+  }).join('\n\n---\n\n');
+
+  const system = `You are Lumen, an assistant that answers questions using ONLY the user's retrieved note chunks.
+Rules:
+- Ground every claim in the supplied chunks; if the chunks don't answer, say so honestly.
+- Cite chunk IDs inline exactly, e.g. [n01.1], [n04.2]. Every substantive claim should carry a citation.
+- Keep answers tight, ideally under 180 words. Use markdown lightly when it helps.
+- Do not invent notes, chunks, or facts not present in the context.`;
+
+  const user = `Retrieved chunks:\n\n${contextBlocks || '(no relevant chunks found)'}\n\n---\n\nQuestion: ${question}`;
+  return {
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    system,
+    user,
+    contextBlocks,
+    inputTokens: estimateTokens(system + user),
+  };
+}
+
+function scoreBar(score) {
+  const pct = Math.max(4, Math.min(100, Math.round((score || 0) * 100)));
+  return `<div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full bg-pulse-500/70" style="width:${pct}%"></div></div>`;
+}
+
+function recordAnswerFeedback(qaId, verdict, comment = '') {
+  const wrap = document.getElementById(qaId);
+  if (!wrap) return;
+  const item = {
+    feedbackId: 'fb_' + Date.now().toString(36),
+    ts: new Date().toISOString(),
+    question: wrap.dataset.question || '',
+    answerHash: contentHash(wrap.querySelector('.ask-answer')?.textContent || ''),
+    config: { topK: DEFAULT_RETRIEVAL_CONFIG.topK, chunking: 'chunked' },
+    verdict,
+    comment,
+  };
+  const all = loadFeedback();
+  all.push(item);
+  saveFeedback(all);
+  const target = wrap.querySelector('.feedback-status');
+  if (target) target.textContent = verdict === 'up' ? 'Saved: helpful' : 'Saved: needs work';
+}
+
 // ---------- Ask: render Q&A ----------
+function sourceForRef(ref) {
+  const clean = String(ref || '').toLowerCase();
+  const passage = state.passages.find(p => p.chunkId.toLowerCase() === clean);
+  if (passage) return { passage, note: noteById(passage.noteId), ref: passage.chunkId };
+  const noteId = clean.split('.')[0];
+  const note = noteById(noteId);
+  return note ? { note, ref: note.id } : null;
+}
+
+function openSourceRef(ref) {
+  const source = sourceForRef(ref);
+  if (!source?.note) return;
+  selectNote(source.note.id, { chunkId: source.passage?.chunkId || null });
+}
+
 function replaceCitationsInHTML(html) {
   const cited = new Set();
-  const rendered = html.replace(/\[(n\d+)\]/gi, (_, id) => {
-    const nid = id.toLowerCase();
-    const n = state.notes.find(x => x.id === nid);
-    if (n) {
-      cited.add(nid);
-      return `<button class="citation-chip" data-id="${nid}" title="${escapeHtml(n.title)}">[${nid}]</button>`;
+  const rendered = html.replace(/\[([a-z0-9_]+(?:\.\d+)?)\]/gi, (_, id) => {
+    const source = sourceForRef(id);
+    if (source?.note) {
+      cited.add(source.ref);
+      const label = source.passage ? `${source.note.title} · ${source.passage.headingPath}` : source.note.title;
+      return `<button class="citation-chip" data-ref="${escapeHtml(source.ref)}" title="${escapeHtml(label)}">[${escapeHtml(source.ref)}]</button>`;
     }
     return `[${escapeHtml(id)}]`;
   });
   return { html: rendered, cited: Array.from(cited) };
 }
 
-function appendQAElement(question, contextNotes) {
+function appendQAElement(question, contextItems, promptMeta, options = {}) {
   const conv = document.getElementById('ask-conversation');
   document.getElementById('ask-empty').classList.add('hidden');
 
   const qaId = 'qa-' + Date.now().toString(36);
-  const ctxItems = contextNotes.map(({ note, score }) => `
-    <li class="py-1.5 flex items-start gap-2">
-      <button class="text-left text-pulse-500 hover:underline" data-id="${note.id}">${escapeHtml(note.title)}</button>
-      <span class="text-[10px] font-mono text-ink-400 shrink-0 mt-0.5">[${note.id}] · ${(score * 100).toFixed(0)}%</span>
-    </li>
+  const ctxItems = contextItems.map(({ passage, note, score, lexical, semantic }, index) => `
+    <div class="grid md:grid-cols-[2rem_1fr_7rem] gap-3 px-5 py-3 border-t border-ink-800">
+      <div class="text-[10px] font-mono text-ink-400 pt-0.5">#${index + 1}</div>
+      <button class="text-left group" data-id="${note.id}" data-chunk="${passage.chunkId}">
+        <div class="text-sm text-pulse-500 group-hover:underline">${escapeHtml(note.title)} <span class="font-mono text-[11px] text-ink-400">[${escapeHtml(passage.chunkId)}]</span></div>
+        <div class="text-[11px] text-ink-400 mt-0.5">${escapeHtml(passage.headingPath)}</div>
+        <div class="text-xs text-ink-300 mt-1 leading-relaxed">${escapeHtml(stripMarkdownForRetrieval(passage.text).slice(0, 120))}${passage.text.length > 120 ? '…' : ''}</div>
+      </button>
+      <div>
+        <div class="flex justify-between text-[10px] font-mono text-ink-400 mb-1"><span>blend</span><span>${score.toFixed(2)}</span></div>
+        ${scoreBar(score)}
+        <div class="mt-1 text-[10px] font-mono text-ink-500">sem ${semantic ? semantic.toFixed(2) : '—'} · lex ${lexical ? lexical.toFixed(2) : '—'}</div>
+      </div>
+    </div>
   `).join('');
 
   const wrap = document.createElement('div');
   wrap.id = qaId;
+  wrap.dataset.question = question;
   wrap.className = 'fade-in rounded-xl border border-ink-700 bg-ink-900 overflow-hidden';
   wrap.innerHTML = `
     <div class="px-5 py-4 border-b border-ink-700 bg-ink-800/50">
-      <div class="text-[10px] font-mono tracking-widest text-ink-400 uppercase mb-1">Question</div>
+      <div class="text-[10px] font-mono text-ink-400 mb-1">Question</div>
       <div class="text-ink-100 font-medium">${escapeHtml(question)}</div>
     </div>
     <details class="border-b border-ink-700 group">
       <summary class="px-5 py-3 text-xs text-ink-300 cursor-pointer hover:text-ink-100 flex items-center gap-2 list-none">
         <svg class="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        <span class="font-mono tracking-widest text-[10px] uppercase text-ink-400">Context sent</span>
-        <span class="text-[11px] text-ink-400">· ${contextNotes.length} notes</span>
+        <span class="font-mono text-[10px] text-ink-400">How this answer was made</span>
+        <span class="text-[11px] text-ink-400">· ${contextItems.length} chunks · ~${promptMeta.inputTokens.toLocaleString()} input tokens</span>
       </summary>
-      <ul class="px-5 pb-4 text-sm">
-        ${ctxItems || '<li class="text-xs text-ink-400 italic">No relevant notes found. Asking the model anyway with no context.</li>'}
-      </ul>
+      <div>
+        <div class="px-5 pb-3 text-[11px] text-ink-400">
+          Retrieval uses chunked notes with a semantic/lexical blend. The exact prompt below is what leaves this browser when an API key is set.
+        </div>
+        ${ctxItems || '<div class="px-5 pb-4 text-xs text-ink-400 italic">No relevant chunks found. Lumen should decline unless your notes contain the answer elsewhere.</div>'}
+        <details class="mx-5 my-4 rounded-lg border border-ink-700 bg-ink-950">
+          <summary class="cursor-pointer px-3 py-2 text-[11px] font-mono text-ink-300">Exact prompt sent to model</summary>
+          <pre class="max-h-72 overflow-auto whitespace-pre-wrap p-3 text-[11px] text-ink-300 border-t border-ink-700">${escapeHtml(promptMeta.system + '\n\n' + promptMeta.user)}</pre>
+        </details>
+      </div>
     </details>
     <div class="px-5 py-5">
-      <div class="text-[10px] font-mono tracking-widest text-accent-500 uppercase mb-2">Answer</div>
-      <div class="prose-lumen ask-answer" data-qa="${qaId}"><span class="text-ink-400 inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-accent-500 pulse-dot"></span>thinking…</span></div>
+      <div class="text-[10px] font-mono text-accent-500 mb-2">${options.retrievalOnly ? 'Retrieval only' : 'Answer'}</div>
+      <div class="prose-lumen ask-answer" data-qa="${qaId}">${options.retrievalOnly ? '<span class="text-ink-300">Add an OpenRouter key in Settings to synthesize an answer from these chunks. Retrieval already ran locally.</span>' : '<span class="text-ink-400 inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-accent-500 pulse-dot"></span>thinking…</span>'}</div>
       <div class="ask-citations mt-4 flex flex-wrap gap-1.5"></div>
+      <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-ink-400">Was this useful?</span>
+        <button class="btn-ghost text-[11px] px-2 py-1 feedback-up">Thumbs up</button>
+        <button class="btn-ghost text-[11px] px-2 py-1 feedback-down">Thumbs down</button>
+        <span class="feedback-status text-[11px] text-ink-400"></span>
+      </div>
     </div>
   `;
   conv.prepend(wrap);
   // wire context click-to-open
   wrap.querySelectorAll('button[data-id]').forEach(b => {
-    b.addEventListener('click', () => selectNote(b.dataset.id));
+    b.addEventListener('click', () => selectNote(b.dataset.id, { chunkId: b.dataset.chunk || null }));
   });
+  wrap.querySelector('.feedback-up')?.addEventListener('click', () => recordAnswerFeedback(qaId, 'up'));
+  wrap.querySelector('.feedback-down')?.addEventListener('click', () => recordAnswerFeedback(qaId, 'down'));
   return qaId;
 }
 
@@ -1655,35 +2289,217 @@ function finalizeAnswer(qaId, answer) {
   const el = document.querySelector(`.ask-answer[data-qa="${qaId}"]`);
   if (!el) return;
   // Render markdown first, then swap [nXX] in the resulting HTML with citation buttons
-  const markedHtml = marked.parse(answer);
+  const markedHtml = renderMarkdown(answer);
   const { html, cited } = replaceCitationsInHTML(markedHtml);
   el.innerHTML = html;
   el.querySelectorAll('.citation-chip').forEach(b => {
-    b.addEventListener('click', () => selectNote(b.dataset.id));
+    b.addEventListener('click', () => openSourceRef(b.dataset.ref));
   });
   // Tail chips
   const chipsWrap = el.parentElement.querySelector('.ask-citations');
   if (cited.length > 0) {
-    chipsWrap.innerHTML = '<span class="text-[10px] font-mono tracking-widest text-ink-400 uppercase mr-1 self-center">Sources:</span>' +
-      cited.map(id => {
-        const n = state.notes.find(x => x.id === id);
-        return n ? `<button class="citation-chip" data-id="${id}">${escapeHtml(n.title)}</button>` : '';
+    chipsWrap.innerHTML = '<span class="text-[10px] font-mono text-ink-400 mr-1 self-center">Sources:</span>' +
+      cited.map(ref => {
+        const source = sourceForRef(ref);
+        return source?.note ? `<button class="citation-chip" data-ref="${escapeHtml(ref)}">${escapeHtml(ref)} · ${escapeHtml(source.note.title)}</button>` : '';
       }).join('');
     chipsWrap.querySelectorAll('.citation-chip').forEach(b => {
-      b.addEventListener('click', () => selectNote(b.dataset.id));
+      b.addEventListener('click', () => openSourceRef(b.dataset.ref));
     });
   }
+}
+
+// ---------- Eval harness ----------
+function rankOfFirstGold(results, expected) {
+  if (!expected || expected.length === 0) return null;
+  const gold = new Set(expected);
+  const idx = results.findIndex(r => gold.has(r.note?.id || r.noteId || r.passage?.noteId));
+  return idx >= 0 ? idx + 1 : null;
+}
+
+function evalMetrics(perCase, baselineCases) {
+  const answerable = perCase.filter(r => r.expected.length > 0);
+  const noAnswer = perCase.filter(r => r.expected.length === 0);
+  const hit1 = answerable.filter(r => r.rank && r.rank <= 1).length / Math.max(1, answerable.length);
+  const hit5 = answerable.filter(r => r.rank && r.rank <= 5).length / Math.max(1, answerable.length);
+  const mrr = answerable.reduce((sum, r) => sum + (r.rank ? 1 / r.rank : 0), 0) / Math.max(1, answerable.length);
+  const noAnswerAccuracy = noAnswer.filter(r => r.noAnswerCorrect).length / Math.max(1, noAnswer.length);
+  const baselineAnswerable = baselineCases.filter(r => r.expected.length > 0);
+  const baselineHit5 = baselineAnswerable.filter(r => r.rank && r.rank <= 5).length / Math.max(1, baselineAnswerable.length);
+  return {
+    hit1,
+    hit5,
+    mrr,
+    baselineHit5,
+    liftHit5: hit5 - baselineHit5,
+    noAnswerAccuracy,
+    cases: perCase.length,
+    answerable: answerable.length,
+    noAnswer: noAnswer.length,
+  };
+}
+
+function pct(n) {
+  if (!Number.isFinite(n)) return '—';
+  return `${Math.round(n * 100)}%`;
+}
+
+function renderEvalMetrics(metrics) {
+  document.getElementById('eval-hit1').textContent = pct(metrics.hit1);
+  document.getElementById('eval-hit5').textContent = pct(metrics.hit5);
+  document.getElementById('eval-mrr').textContent = metrics.mrr.toFixed(2);
+  document.getElementById('eval-delta').textContent = `${metrics.liftHit5 >= 0 ? '+' : ''}${pct(metrics.liftHit5)}`;
+}
+
+function renderEvalRows(run) {
+  const rows = run.perCase.map(r => {
+    const qualityClass = r.expected.length === 0
+      ? (r.noAnswerCorrect ? 'quality-row-pass' : 'quality-row-fail')
+      : (r.rank === 1 ? 'quality-row-pass' : r.rank && r.rank <= run.config.topK ? 'quality-row-warn' : 'quality-row-fail');
+    const retrieved = r.retrieved.slice(0, 3).map(x => `
+      <button class="citation-chip" data-ref="${escapeHtml(x.chunkId || x.noteId)}">${escapeHtml(x.chunkId || x.noteId)} · ${x.score.toFixed(2)}</button>
+    `).join(' ');
+    return `
+      <details class="${qualityClass}">
+        <summary class="cursor-pointer px-4 py-3 grid md:grid-cols-[5rem_1fr_9rem_8rem] gap-3 items-center text-sm">
+          <span class="font-mono text-[11px] text-ink-400">${escapeHtml(r.id)}</span>
+          <span class="text-ink-100">${escapeHtml(r.question)}</span>
+          <span class="font-mono text-[11px] text-ink-400">${r.expected.length ? 'rank ' + (r.rank || 'miss') : (r.noAnswerCorrect ? 'declined' : 'over-retrieved')}</span>
+          <span class="font-mono text-[11px] text-ink-400">${escapeHtml(r.category)}</span>
+        </summary>
+        <div class="px-4 pb-4 text-xs text-ink-300">
+          <div class="mb-2"><span class="text-ink-400">Gold:</span> ${r.expected.length ? r.expected.map(id => `<span class="font-mono">${escapeHtml(id)}</span>`).join(', ') : 'no answer in corpus'}</div>
+          <div class="mb-2"><span class="text-ink-400">Rubric:</span> ${escapeHtml(r.rubric || '')}</div>
+          <div class="flex flex-wrap gap-1.5">${retrieved || '<span class="text-ink-500">No chunks above threshold.</span>'}</div>
+        </div>
+      </details>
+    `;
+  }).join('');
+  const el = document.getElementById('eval-results');
+  el.innerHTML = rows || '<div class="p-5 text-sm text-ink-400">No results yet.</div>';
+  el.querySelectorAll('.citation-chip').forEach(b => b.addEventListener('click', () => openSourceRef(b.dataset.ref)));
+}
+
+async function renderEvalHistory() {
+  const count = BENCHMARK_CASES.length;
+  document.getElementById('eval-status').textContent = `${count} cases · ${state.passages.length} chunks · no data leaves this page`;
+  if (state.lastEval) {
+    renderEvalMetrics(state.lastEval.metrics);
+    renderEvalRows(state.lastEval);
+    return;
+  }
+  const runs = await idbAll(IDB_EVAL_RUNS).catch(() => []);
+  const latest = runs.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
+  if (latest) {
+    state.lastEval = latest;
+    renderEvalMetrics(latest.metrics);
+    renderEvalRows(latest);
+    document.getElementById('eval-summary').textContent = `Latest run: ${latest.config.mode} · ${new Date(latest.timestamp).toLocaleString()}`;
+  }
+}
+
+async function runBenchmark({ semantic = false } = {}) {
+  const runBtn = document.getElementById(semantic ? 'eval-run-semantic' : 'eval-run-lexical');
+  const otherBtn = document.getElementById(semantic ? 'eval-run-lexical' : 'eval-run-semantic');
+  runBtn.disabled = true;
+  otherBtn.disabled = true;
+  const mode = semantic ? 'semantic+lexical' : 'lexical';
+  const config = { mode, topK: 5, chunking: 'chunked', blend: semantic ? '72/28' : '0/100' };
+  const perCase = [];
+  const baselineCases = [];
+  const start = performance.now();
+  document.getElementById('eval-summary').textContent = `Running ${mode} benchmark...`;
+  try {
+    for (let i = 0; i < BENCHMARK_CASES.length; i++) {
+      const c = BENCHMARK_CASES[i];
+      document.getElementById('eval-status').textContent = `Case ${i + 1}/${BENCHMARK_CASES.length} · ${c.id}`;
+      const baseline = await rankNotes(c.question, config.topK, { semantic });
+      const ranked = await rankPassages(c.question, config.topK, { semantic });
+      const expected = c.expected || [];
+      const rank = rankOfFirstGold(ranked, expected);
+      const baselineRank = rankOfFirstGold(baseline, expected);
+      const topScore = ranked[0]?.score || 0;
+      const noAnswerCorrect = expected.length === 0 && topScore < (semantic ? 0.28 : 0.18);
+      baselineCases.push({ id: c.id, expected, rank: baselineRank });
+      perCase.push({
+        id: c.id,
+        question: c.question,
+        expected,
+        rubric: c.rubric,
+        category: c.category,
+        difficulty: c.difficulty,
+        rank,
+        baselineRank,
+        noAnswerCorrect,
+        retrieved: ranked.map(r => ({
+          chunkId: r.passage.chunkId,
+          noteId: r.note.id,
+          score: r.score,
+          lexical: r.lexical,
+          semantic: r.semantic,
+          headingPath: r.passage.headingPath,
+          preview: stripMarkdownForRetrieval(r.passage.text).slice(0, 180),
+        })),
+      });
+      if (!semantic) await new Promise(r => setTimeout(r, 0));
+    }
+    const metrics = evalMetrics(perCase, baselineCases);
+    const run = {
+      runId: 'run_' + Date.now().toString(36),
+      timestamp: new Date().toISOString(),
+      config,
+      metrics,
+      latencyMs: Math.round(performance.now() - start),
+      perCase,
+    };
+    state.lastEval = run;
+    await idbSet(IDB_EVAL_RUNS, run.runId, run).catch(() => {});
+    renderEvalMetrics(metrics);
+    renderEvalRows(run);
+    document.getElementById('eval-summary').textContent = `${mode} run complete: hit@5 ${pct(metrics.hit5)}, MRR ${metrics.mrr.toFixed(2)}, no-answer ${pct(metrics.noAnswerAccuracy)}`;
+    document.getElementById('eval-detail').textContent = `Compared against whole-note baseline hit@5 ${pct(metrics.baselineHit5)}. Runtime ${(run.latencyMs / 1000).toFixed(1)}s.`;
+  } catch (err) {
+    document.getElementById('eval-summary').textContent = `Benchmark failed: ${err.message || err}`;
+    document.getElementById('eval-detail').textContent = semantic ? 'Semantic eval needs the local MiniLM model download to complete. Fast eval still works without it.' : 'Try reloading and running the fast eval again.';
+  } finally {
+    runBtn.disabled = false;
+    otherBtn.disabled = false;
+    document.getElementById('eval-status').textContent = `${BENCHMARK_CASES.length} cases · ${state.passages.length} chunks · latest run saved locally`;
+  }
+}
+
+function exportEvalJson() {
+  if (!state.lastEval) {
+    alert('Run a benchmark first.');
+    return;
+  }
+  downloadJson(`lumen-eval-${state.lastEval.runId}.json`, state.lastEval);
+}
+
+function exportEvalMarkdown() {
+  if (!state.lastEval) {
+    alert('Run a benchmark first.');
+    return;
+  }
+  const r = state.lastEval;
+  const md = [
+    `| Run | Chunking | Mode | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer |`,
+    `|---|---|---:|---:|---:|---:|---:|---:|---:|---:|`,
+    `| ${r.runId} | ${r.config.chunking} | ${r.config.mode} | ${r.metrics.cases} | ${pct(r.metrics.hit1)} | ${pct(r.metrics.hit5)} | ${r.metrics.mrr.toFixed(2)} | ${pct(r.metrics.baselineHit5)} | ${pct(r.metrics.liftHit5)} | ${pct(r.metrics.noAnswerAccuracy)} |`,
+    '',
+    `Generated locally by Lumen on ${new Date(r.timestamp).toLocaleString()}. Retrieval metrics do not require an API key.`,
+  ].join('\n');
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `lumen-eval-${r.runId}.md`;
+  a.click();
 }
 
 async function askQuestion(question) {
   const q = (question || '').trim();
   if (!q) return;
   const settings = loadSettings();
-  if (!settings.apiKey) {
-    updateByokBanner();
-    document.getElementById('byok-input')?.focus();
-    return;
-  }
 
   const sendBtn = document.getElementById('ask-send');
   sendBtn.disabled = true;
@@ -1692,23 +2508,15 @@ async function askQuestion(question) {
   let qaId;
   try {
     // Retrieve context
-    const contextNotes = await retrieveContext(q, 5);
-    qaId = appendQAElement(q, contextNotes);
-
-    // Build prompt
-    const contextBlocks = contextNotes.map(({ note }) => {
-      const body = note.content.replace(/^#+\s.*\n?/m, '').trim().slice(0, 1200);
-      return `[${note.id}] Title: ${note.title}\n${body}`;
-    }).join('\n\n---\n\n');
-
-    const system = `You are Lumen, an assistant that answers questions using ONLY the user's notes provided as context.
-Rules:
-- Ground every claim in the supplied notes; if the notes don't answer, say so honestly.
-- Cite notes inline using their bracket IDs, e.g. [n01], [n04]. Every substantive claim should carry a citation.
-- Keep answers tight (ideally under 180 words). Use markdown lightly (bold, a short list) when it helps.
-- Do not invent notes that don't exist. Do not quote the raw [nXX] IDs in prose; only in citations.`;
-
-    const user = `User's notes (context):\n\n${contextBlocks || '(no relevant notes found)'}\n\n---\n\nQuestion: ${q}`;
+    const contextItems = await retrieveContext(q, 5);
+    const promptMeta = buildPrompt(q, contextItems);
+    if (!settings.apiKey) {
+      updateByokBanner();
+      qaId = appendQAElement(q, contextItems, promptMeta, { retrievalOnly: true });
+      document.getElementById('byok-input')?.focus();
+      return;
+    }
+    qaId = appendQAElement(q, contextItems, promptMeta);
 
     // Stream the answer
     let accum = '';
@@ -1716,14 +2524,11 @@ Rules:
     await streamAnswer({
       apiKey: settings.apiKey,
       model: settings.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
+      messages: promptMeta.messages,
       onToken: (t) => {
         accum += t;
         // live-render as plain text with light citation coloring
-        const live = escapeHtml(accum).replace(/\[(n\d+)\]/gi,
+        const live = escapeHtml(accum).replace(/\[([a-z0-9_]+(?:\.\d+)?)\]/gi,
           (_, id) => `<span class="text-accent-500 font-mono text-xs">[${id}]</span>`);
         el.innerHTML = live + '<span class="inline-block w-1.5 h-4 bg-accent-500 ml-0.5 align-middle animate-pulse"></span>';
       },
@@ -1799,7 +2604,7 @@ function saveNewNote() {
 function exportAll() {
   const payload = {
     exportedAt: new Date().toISOString(),
-    source: 'lumen-v0.4',
+    source: 'lumen-v0.5',
     seedNotes: SEED_NOTES.length,
     userNotes: loadUserNotes(),
   };
@@ -1808,6 +2613,80 @@ function exportAll() {
   a.href = URL.createObjectURL(blob);
   a.download = `lumen-export-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
+}
+
+function downloadJson(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function exportFeedback() {
+  downloadJson(`lumen-feedback-${new Date().toISOString().slice(0,10)}.json`, {
+    exportedAt: new Date().toISOString(),
+    feedback: loadFeedback(),
+  });
+}
+
+function sendFeedbackIssue() {
+  const feedback = loadFeedback();
+  const body = JSON.stringify({ feedback }, null, 2).slice(0, 6000);
+  const issueBody = `Feedback exported from Lumen. No API keys are included.\n\n\`\`\`json\n${body}\n\`\`\``;
+  const url = 'https://github.com/sillanaresh/lumen/issues/new?' + new URLSearchParams({
+    title: 'Lumen feedback export',
+    body: issueBody,
+  }).toString();
+  window.open(url, '_blank', 'noopener');
+}
+
+// ---------- Onboarding ----------
+const ONBOARDING_STEPS = [
+  {
+    title: 'This is your graph',
+    body: 'Notes are dots. Shared ideas are lines. Click any node to read the note and inspect its connections.',
+    preview: 'The seeded workspace is about learning science, so you can test the product before adding anything personal.',
+    mode: 'graph',
+  },
+  {
+    title: 'Ask, then inspect',
+    body: 'Lumen retrieves chunks first, shows the exact context, then sends only those chunks to your chosen model when a key is set.',
+    preview: 'Try: “How should I space my study sessions?” Without a key, Lumen still shows the retrieved chunks.',
+    mode: 'ask',
+  },
+  {
+    title: 'Know what leaves',
+    body: 'Notes, embeddings, eval runs, and feedback stay local. Ask sends shown chunks to OpenRouter. URL import sends the URL to r.jina.ai.',
+    preview: 'The Quality Lab runs in your browser and produces evidence you can export.',
+    mode: 'evals',
+  },
+];
+
+let onboardingIndex = 0;
+function renderOnboardingStep() {
+  const step = ONBOARDING_STEPS[onboardingIndex];
+  document.getElementById('onboarding-step-label').textContent = `STEP ${onboardingIndex + 1} OF ${ONBOARDING_STEPS.length}`;
+  document.getElementById('onboarding-title').textContent = step.title;
+  document.getElementById('onboarding-body').textContent = step.body;
+  document.getElementById('onboarding-preview').textContent = step.preview;
+  document.getElementById('onboarding-next').textContent = onboardingIndex === ONBOARDING_STEPS.length - 1 ? 'Finish' : 'Next';
+  setMode(step.mode);
+}
+function openOnboardingIfNeeded() {
+  if (location.hash === '#eval') return;
+  if (localStorage.getItem(ONBOARDING_KEY)) return;
+  const modal = document.getElementById('onboarding-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  onboardingIndex = 0;
+  renderOnboardingStep();
+}
+function closeOnboarding() {
+  localStorage.setItem(ONBOARDING_KEY, 'done');
+  const modal = document.getElementById('onboarding-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
 }
 
 // ---------- Ingest (PDF / URL) ----------
@@ -1905,6 +2784,9 @@ async function extractPdf(file) {
     pages.push(lines.filter(Boolean).join('\n'));
   }
   let content = pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (stripMarkdownForRetrieval(content).length < 40) {
+    throw new Error('This PDF appears to be scanned images. Lumen cannot read it yet. Try a text-based PDF.');
+  }
   const firstLine = content.split('\n').find(s => s.trim().length > 0) || '';
   const base = file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
   const title = (firstLine.length >= 8 && firstLine.length <= 120) ? firstLine.trim() : (base || 'Untitled PDF');
@@ -1941,6 +2823,14 @@ async function saveIngestedNote() {
   const tagsRaw = document.getElementById('ingest-tags').value.trim();
   const content = document.getElementById('ingest-content').value.trim();
   if (!title || !content) { alert('Title and content required.'); return; }
+  const incomingHash = contentHash(stripMarkdownForRetrieval(content));
+  const duplicate = state.notes.find(n => contentHash(stripMarkdownForRetrieval(n.content)) === incomingHash);
+  if (duplicate && !confirm(`Looks like you already imported "${duplicate.title}". Import another copy anyway?`)) {
+    state.selectedId = duplicate.id;
+    closeIngest();
+    setMode('notes');
+    return;
+  }
   const tags = tagsRaw.split(',').map(s => s.trim()).filter(Boolean);
   const id = 'i_' + Date.now().toString(36);
   const userNotes = loadUserNotes();
@@ -1963,6 +2853,10 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function renderMarkdown(md) {
+  const html = marked.parse(md || '');
+  return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+}
 
 // ---------- Wiring ----------
 document.addEventListener('DOMContentLoaded', () => {
@@ -1971,12 +2865,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   rebuild();
   // Initial render
-  setMode('graph');
+  setMode(location.hash === '#eval' ? 'evals' : 'graph');
+  window.addEventListener('hashchange', () => {
+    if (location.hash === '#eval') setMode('evals');
+  });
+  setTimeout(openOnboardingIfNeeded, 500);
 
   document.getElementById('tab-graph').addEventListener('click', () => setMode('graph'));
   document.getElementById('tab-notes').addEventListener('click', () => setMode('notes'));
   document.getElementById('tab-ask').addEventListener('click', () => setMode('ask'));
+  document.getElementById('tab-evals').addEventListener('click', () => {
+    history.replaceState(null, '', '#eval');
+    setMode('evals');
+  });
   document.getElementById('goto-ask')?.addEventListener('click', () => setMode('ask'));
+  document.getElementById('eval-run-lexical')?.addEventListener('click', () => runBenchmark({ semantic: false }));
+  document.getElementById('eval-run-semantic')?.addEventListener('click', () => runBenchmark({ semantic: true }));
+  document.getElementById('eval-export-json')?.addEventListener('click', exportEvalJson);
+  document.getElementById('eval-export-md')?.addEventListener('click', exportEvalMarkdown);
+  document.getElementById('onboarding-skip')?.addEventListener('click', closeOnboarding);
+  document.getElementById('onboarding-next')?.addEventListener('click', () => {
+    if (onboardingIndex < ONBOARDING_STEPS.length - 1) {
+      onboardingIndex += 1;
+      renderOnboardingStep();
+    } else {
+      closeOnboarding();
+      setMode('graph');
+    }
+  });
 
   document.getElementById('edge-mode-tags').addEventListener('click', () => setEdgeMode('tags'));
   document.getElementById('edge-mode-semantic').addEventListener('click', () => setEdgeMode('semantic'));
@@ -2069,6 +2985,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = loadSettings();
     document.getElementById('settings-key').value = s.apiKey;
     document.getElementById('settings-model').value = s.model;
+    const fbCount = loadFeedback().length;
+    document.getElementById('settings-feedback-count').textContent = fbCount
+      ? `${fbCount} feedback ${fbCount === 1 ? 'event' : 'events'} saved locally.`
+      : 'No feedback saved yet.';
     settingsModal.classList.remove('hidden');
     settingsModal.classList.add('flex');
   }
@@ -2091,11 +3011,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm('Clear all cached embeddings?')) return;
     try {
       const db = await idbOpen();
-      await new Promise((r) => { const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).clear(); tx.oncomplete = r; });
+      await new Promise((r) => { const tx = db.transaction(IDB_EMBEDDINGS, 'readwrite'); tx.objectStore(IDB_EMBEDDINGS).clear(); tx.oncomplete = r; });
       state.embeddings.clear();
+      state.passageEmbeddings.clear();
       alert('Embedding cache cleared.');
     } catch (err) { alert('Error: ' + err.message); }
   });
+  document.getElementById('settings-export-feedback')?.addEventListener('click', exportFeedback);
+  document.getElementById('settings-send-feedback')?.addEventListener('click', sendFeedbackIssue);
   settingsModal.addEventListener('click', e => {
     if (e.target.id === 'settings-modal') closeSettings();
   });

@@ -190,6 +190,9 @@ function draw(root) {
     for (let i = 0; i < 200; i++) sim.tick(); // settle statically, no animation
     tick();
   } else {
+    // pre-settle so the first painted frame is already composed
+    for (let i = 0; i < 80; i++) sim.tick();
+    tick();
     sim.on('tick', tick);
   }
 }

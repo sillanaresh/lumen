@@ -1,152 +1,252 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lumen tests</title>
-<body style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0e14; color:#e6e9f0; padding:24px;">
-<h1>Lumen tests</h1>
-<pre id="out">Running...</pre>
-<script>
-const CHUNK_SIZE_CHARS = 1200;
-const CHUNK_OVERLAP = 0.15;
-const STOPWORDS = new Set(['the','and','for','that','with','from','this','what','when','where','why','how','study','learning','learn']);
+<head>
+<meta charset="UTF-8" />
+<title>Lumen — pipeline tests</title>
+<style>
+  body { font-family: ui-monospace, monospace; background: #07080b; color: #e7eaf2; padding: 24px; font-size: 13px; }
+  .pass { color: #4ade80; }
+  .fail { color: #f87171; }
+  h1 { font-size: 16px; }
+  #summary { font-size: 15px; margin: 12px 0; }
+  pre { color: #8b94ab; }
+</style>
+</head>
+<body>
+<h1>Lumen pipeline tests <span style="color:#8b94ab">— pure functions, zero dependencies</span></h1>
+<div id="summary">running…</div>
+<div id="out"></div>
+<pre id="results"></pre>
 
-function contentHash(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0).toString(36);
-}
-function stripMarkdownForRetrieval(s) {
-  return String(s).replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[#>*_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function normalizeTokens(s) {
-  return (String(s).toLowerCase().match(/[a-z0-9]+/g) || []).filter(t => t.length > 2 && !STOPWORDS.has(t));
-}
-function lexicalScore(query, body, title = '', tags = []) {
-  const qTokens = Array.from(new Set(normalizeTokens(query)));
-  if (qTokens.length === 0) return 0;
-  const bodyText = stripMarkdownForRetrieval(body).toLowerCase();
-  const titleText = String(title).toLowerCase();
-  const tagText = tags.join(' ').toLowerCase();
-  const bodyTokens = new Set(normalizeTokens(bodyText));
-  let score = 0;
-  for (const token of qTokens) {
-    if (titleText.includes(token)) score += 2.6;
-    if (tagText.includes(token)) score += 1.8;
-    if (bodyTokens.has(token)) score += 1;
-    if (bodyText.includes(token)) score += 0.25;
-  }
-  return score / Math.max(3, qTokens.length);
-}
-function splitSentences(text) {
-  return String(text).trim().split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
-}
-function hardSplitText(text, maxChars = CHUNK_SIZE_CHARS) {
-  const chunks = [];
-  let cur = '';
-  for (const sentence of splitSentences(text)) {
-    if ((cur + ' ' + sentence).trim().length > maxChars && cur.trim()) { chunks.push(cur.trim()); cur = sentence; }
-    else cur = (cur ? cur + ' ' : '') + sentence;
-  }
-  if (cur.trim()) chunks.push(cur.trim());
-  return chunks;
-}
-function markdownBlocks(content, fallbackHeading) {
-  const blocks = [];
-  let heading = fallbackHeading;
-  let buffer = [];
-  const flush = () => { const text = buffer.join('\n').trim(); if (text) blocks.push({ text, headingPath: heading }); buffer = []; };
-  for (const line of String(content).split('\n')) {
-    const h = line.match(/^#{1,4}\s+(.+)$/);
-    if (h) { flush(); heading = h[1]; }
-    else if (!line.trim()) flush();
-    else buffer.push(line);
-  }
-  flush();
-  if (!blocks.length) blocks.push({ text: fallbackHeading, headingPath: fallbackHeading });
-  return blocks;
-}
-function chunkNote(note) {
-  const blocks = markdownBlocks(note.content, note.title);
-  const chunks = [];
-  let cur = '';
-  let headingPath = note.title;
-  for (const block of blocks) {
-    for (const part of block.text.length > CHUNK_SIZE_CHARS ? hardSplitText(block.text) : [block.text]) {
-      if ((cur + '\n\n' + part).trim().length > CHUNK_SIZE_CHARS && cur.trim()) {
-        chunks.push({ text: cur.trim(), headingPath });
-        cur = part;
-      } else {
-        cur = (cur ? cur + '\n\n' : '') + part;
-      }
-      headingPath = block.headingPath;
-    }
-  }
-  if (cur.trim()) chunks.push({ text: cur.trim(), headingPath });
-  return chunks.map((chunk, i) => ({ chunkId: `${note.id}.${i + 1}`, contentHash: contentHash(chunk.text), ...chunk }));
-}
+<script type="module">
+import {
+  contentHash, stripMarkdown, lexicalScore, cosine, markdownBlocks, chunkNote, chunkAll,
+  rankChunks, isNoAnswer, buildPrompt, parseCitations, citationPrecision,
+  rankOfFirstGold, computeMetrics, metricsMarkdownTable, estimateTokens,
+  CHUNK_SIZE_CHARS,
+} from './js/pipeline.js';
 
-const tests = [];
-function test(name, fn) { tests.push({ name, fn }); }
-function assert(value, message) { if (!value) throw new Error(message || 'assertion failed'); }
+const results = [];
+function test(name, fn) {
+  try { fn(); results.push({ name, ok: true }); }
+  catch (e) { results.push({ name, ok: false, error: String(e.message || e) }); }
+}
+function assert(cond, msg = 'assertion failed') { if (!cond) throw new Error(msg); }
+function assertEq(a, b, msg = '') { if (a !== b) throw new Error(`${msg} expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); }
 
-test('short note creates one stable chunk', () => {
-  const chunks = chunkNote({ id: 'n01', title: 'A', content: '# A\n\nSmall body.' });
-  assert(chunks.length === 1, 'expected one chunk');
-  assert(chunks[0].chunkId === 'n01.1', 'expected chunk id n01.1');
-});
-test('long note splits at sentence boundaries', () => {
-  const content = '# Long\n\n' + Array.from({ length: 80 }, (_, i) => `Sentence ${i} teaches retrieval practice.`).join(' ');
-  const chunks = chunkNote({ id: 'n02', title: 'Long', content });
-  assert(chunks.length > 1, 'expected multiple chunks');
-});
-test('heading-only note never creates empty chunks', () => {
-  const chunks = chunkNote({ id: 'n03', title: 'Only heading', content: '# Only heading' });
-  assert(chunks.length === 1, 'expected fallback chunk');
-  assert(chunks[0].text.length > 0, 'expected non-empty text');
-});
-test('markdown stripper removes links and marks', () => {
-  assert(stripMarkdownForRetrieval('**Hi** [there](https://x.test)') === 'Hi there', 'strip failed');
-});
-test('lexical scoring favors expected terms', () => {
-  const score = lexicalScore('active recall memory', 'Active recall strengthens memory traces.', 'Active recall', ['memory']);
-  assert(score > 1, 'score too low');
-});
-test('unrelated lexical score is low', () => {
-  const score = lexicalScore('kubernetes oauth taxes', 'Active recall strengthens memory traces.', 'Active recall', ['memory']);
-  assert(score === 0, 'expected no lexical overlap');
-});
-test('content hash changes when text changes', () => {
-  assert(contentHash('a') !== contentHash('b'), 'hash should change');
-});
-test('heading path follows latest heading', () => {
-  const chunks = chunkNote({ id: 'n04', title: 'Root', content: '# Root\n\nIntro\n\n## Method\n\nBody' });
-  assert(chunks.some(c => c.headingPath === 'Method'), 'expected Method heading path');
-});
-test('empty body falls back to title', () => {
-  const chunks = chunkNote({ id: 'n05', title: 'Fallback', content: '' });
-  assert(chunks[0].text === 'Fallback', 'expected title fallback');
-});
-test('links keep readable anchor text', () => {
-  assert(stripMarkdownForRetrieval('[OpenAI](https://openai.com)').includes('OpenAI'), 'expected link text');
-});
-test('inline code keeps code text', () => {
-  assert(stripMarkdownForRetrieval('Use `retrieval` carefully') === 'Use retrieval carefully', 'expected inline code text');
-});
-test('chunk ids increment monotonically', () => {
-  const content = '# Many\n\n' + Array.from({ length: 100 }, (_, i) => `Sentence ${i} has evidence.`).join(' ');
-  const chunks = chunkNote({ id: 'n06', title: 'Many', content });
-  assert(chunks.every((c, i) => c.chunkId === `n06.${i + 1}`), 'expected monotonic ids');
+const mkNote = (id, title, content, tags = []) => ({ id, title, content, tags });
+const mkChunk = (over = {}) => ({
+  chunkId: 'x.1', noteId: 'x', noteTitle: 'Title', ordinal: 1,
+  headingPath: 'Title', tags: [], text: 'hello world', contentHash: 'h', ...over,
 });
 
-let pass = 0;
-let output = '';
-for (const t of tests) {
-  try { t.fn(); pass++; output += `PASS ${t.name}\n`; }
-  catch (err) { output += `FAIL ${t.name}: ${err.message}\n`; }
-}
-output += `\n${pass}/${tests.length} passed`;
-document.getElementById('out').textContent = output;
+// ---------- contentHash ----------
+test('contentHash is stable and collision-averse for nearby strings', () => {
+  assertEq(contentHash('abc'), contentHash('abc'));
+  assert(contentHash('abc') !== contentHash('abd'));
+  assert(contentHash('') !== contentHash(' '));
+});
+
+// ---------- stripMarkdown ----------
+test('stripMarkdown removes fences, inline code, links, emphasis', () => {
+  const s = stripMarkdown('# H\n\n**bold** *em* `code`\n```js\nignored()\n```\n[label](http://x)');
+  assert(!s.includes('ignored'), 'fence content should be dropped');
+  assert(s.includes('bold') && s.includes('label') && s.includes('code'));
+  assert(!s.includes('#') && !s.includes('*') && !s.includes('('));
+});
+
+// ---------- chunker ----------
+test('short note → exactly one chunk (chunk == note)', () => {
+  const chunks = chunkNote(mkNote('n1', 'Tiny', '# Tiny\n\nJust a line.'));
+  assertEq(chunks.length, 1);
+  assertEq(chunks[0].chunkId, 'n1.1');
+});
+
+test('heading-only note → single non-empty chunk', () => {
+  const chunks = chunkNote(mkNote('n1', 'Only heading', '# Only heading'));
+  assertEq(chunks.length, 1);
+  assert(chunks[0].text.trim().length > 0, 'never an empty chunk');
+});
+
+test('empty content → single fallback chunk, never zero', () => {
+  const chunks = chunkNote(mkNote('n1', 'Empty', ''));
+  assertEq(chunks.length, 1);
+  assert(chunks[0].text.trim().length > 0);
+});
+
+test('long multi-section note splits at headings with heading paths', () => {
+  const para = 'A sentence about learning. '.repeat(30); // ~810 chars
+  const content = `# Top\n\n${para}\n\n## Section A\n\n${para}\n\n## Section B\n\n${para}`;
+  const chunks = chunkNote(mkNote('n1', 'Top', content));
+  assert(chunks.length >= 2, `expected ≥2 chunks, got ${chunks.length}`);
+  assert(chunks.every(c => c.text.length <= CHUNK_SIZE_CHARS + 200), 'chunks near target size');
+  assert(chunks.some(c => c.headingPath.includes('Section A')), 'heading path recorded');
+  chunks.forEach((c, i) => assertEq(c.chunkId, `n1.${i + 1}`, 'ordinal ids'));
+});
+
+test('oversized single paragraph hard-splits at sentence boundaries', () => {
+  const content = 'This is sentence number one of many. '.repeat(80); // ~3000 chars, no headings
+  const chunks = chunkNote(mkNote('n1', 'Wall', content));
+  assert(chunks.length >= 2, `expected ≥2 chunks, got ${chunks.length}`);
+  // continuation chunks carry a 15% overlap tail on top of the target size
+  const maxAllowed = Math.round(CHUNK_SIZE_CHARS * 1.2);
+  assert(chunks.every(c => c.text.length <= maxAllowed), 'chunks within target + overlap');
+});
+
+test('code fences are never split mid-fence', () => {
+  const bigFence = '```js\n' + 'const x = 1;\n'.repeat(150) + '```'; // > chunk size
+  const content = `# Code\n\nIntro para.\n\n${bigFence}\n\nOutro para.`;
+  const blocks = markdownBlocks(content, 'Code');
+  const fenceBlocks = blocks.filter(b => b.code);
+  assertEq(fenceBlocks.length, 1, 'one fence block');
+  assert(fenceBlocks[0].text.startsWith('```') && fenceBlocks[0].text.endsWith('```'), 'fence intact');
+  const chunks = chunkNote(mkNote('n1', 'Code', content));
+  const fenceChunk = chunks.find(c => c.text.includes('const x = 1;'));
+  const opens = (fenceChunk.text.match(/```/g) || []).length;
+  assertEq(opens % 2, 0, 'fence markers balanced inside chunk');
+});
+
+test('unclosed fence at EOF still captured', () => {
+  const blocks = markdownBlocks('# T\n\n```\ndangling code', 'T');
+  assert(blocks.some(b => b.text.includes('dangling code')));
+});
+
+test('chunkAll covers every note', () => {
+  const notes = [mkNote('a', 'A', '# A\n\nbody'), mkNote('b', 'B', '# B\n\nbody')];
+  const chunks = chunkAll(notes);
+  assertEq(new Set(chunks.map(c => c.noteId)).size, 2);
+});
+
+// ---------- lexical scoring ----------
+test('lexicalScore ranks the on-topic chunk above the off-topic one', () => {
+  const hit = mkChunk({ text: 'Spaced repetition flattens the forgetting curve.', noteTitle: 'Spaced repetition' });
+  const miss = mkChunk({ text: 'Supply and demand explains pricing and queues.', noteTitle: 'Mental models' });
+  const q = 'how does spaced repetition affect forgetting?';
+  assert(lexicalScore(q, hit) > lexicalScore(q, miss));
+});
+
+test('lexicalScore is 0 for stopword-only queries', () => {
+  assertEq(lexicalScore('the of and', mkChunk()), 0);
+});
+
+// ---------- cosine ----------
+test('cosine: identical normalized vectors → 1, orthogonal → 0, mismatch → 0', () => {
+  const a = new Float32Array([1, 0]); const b = new Float32Array([0, 1]);
+  assert(Math.abs(cosine(a, a) - 1) < 1e-6);
+  assertEq(cosine(a, b), 0);
+  assertEq(cosine(a, new Float32Array([1, 0, 0])), 0, 'dim mismatch guarded');
+});
+
+// ---------- retrieval ----------
+test('rankChunks lexical mode sorts by score and respects topK', () => {
+  const chunks = [
+    mkChunk({ chunkId: 'a.1', noteId: 'a', text: 'sleep consolidates memory overnight', noteTitle: 'Sleep' }),
+    mkChunk({ chunkId: 'b.1', noteId: 'b', text: 'interleaving beats blocking on mixed tests', noteTitle: 'Interleaving' }),
+    mkChunk({ chunkId: 'c.1', noteId: 'c', text: 'curiosity is cheap attention', noteTitle: 'Curiosity' }),
+  ];
+  const r = rankChunks('how does sleep help memory?', chunks, { topK: 2 });
+  assert(r.length <= 2);
+  assertEq(r[0].chunk.chunkId, 'a.1');
+  assert(r.every((x, i) => i === 0 || r[i - 1].score >= x.score), 'descending');
+  assertEq(r[0].semantic, null, 'semantic null in lexical mode');
+});
+
+test('rankChunks blends semantic + lexical when vectors provided', () => {
+  const chunks = [
+    mkChunk({ chunkId: 'a.1', noteId: 'a', contentHash: 'ha', text: 'zzz unrelated words entirely' }),
+    mkChunk({ chunkId: 'b.1', noteId: 'b', contentHash: 'hb', text: 'also unrelated zzz' }),
+  ];
+  const vecs = { ha: new Float32Array([1, 0]), hb: new Float32Array([0, 1]) };
+  const r = rankChunks('completely different query', chunks, {
+    queryVec: new Float32Array([1, 0]),
+    getVec: (c) => vecs[c.contentHash],
+    topK: 5,
+  });
+  assertEq(r[0].chunk.chunkId, 'a.1', 'cosine should dominate');
+  assert(Math.abs(r[0].score - 0.72) < 1e-6, '0.72 · cosine(1) + 0.28 · lexical(0)');
+});
+
+// ---------- no-answer gate ----------
+test('isNoAnswer fires on empty/weak results and not on strong ones', () => {
+  assert(isNoAnswer([], 'lexical'));
+  assert(isNoAnswer([{ score: 0.1 }], 'lexical'));
+  assert(!isNoAnswer([{ score: 0.9 }], 'lexical'));
+  assert(isNoAnswer([{ score: 0.25 }], 'semantic'));
+  assert(!isNoAnswer([{ score: 0.5 }], 'semantic'));
+});
+
+// ---------- prompt ----------
+test('buildPrompt includes chunk ids, question, and token estimate', () => {
+  const chunks = [{ chunk: mkChunk({ chunkId: 'n01.2', noteTitle: 'Recall', headingPath: 'Recall › Mechanism', text: 'retrieval strengthens memory' }) }];
+  const p = buildPrompt('why does recall work?', chunks);
+  assert(p.user.includes('[n01.2]') && p.user.includes('why does recall work?'));
+  assert(p.system.includes('cite') || p.system.includes('Cite'));
+  assertEq(p.messages.length, 2);
+  assertEq(p.inputTokens, estimateTokens(p.system + p.user));
+});
+
+test('buildPrompt with no chunks says so explicitly', () => {
+  assert(buildPrompt('q', []).user.includes('no relevant chunks'));
+});
+
+// ---------- citations ----------
+test('parseCitations extracts unique chunk ids in order, ignores bare note refs', () => {
+  const c = parseCitations('Claim [n01.1]. More [n02.3], again [n01.1]. Bare [n05] ignored. [N04.2] case-folded.');
+  assertEq(JSON.stringify(c), JSON.stringify(['n01.1', 'n02.3', 'n04.2']));
+});
+
+test('citationPrecision: half the citations point at gold notes → 0.5', () => {
+  assertEq(citationPrecision(['n01.1', 'n02.1'], ['n01']), 0.5);
+  assertEq(citationPrecision([], ['n01']), null, 'no citations → null, not 0');
+});
+
+// ---------- eval metrics ----------
+test('rankOfFirstGold finds the first gold note position', () => {
+  const results = [{ chunk: mkChunk({ noteId: 'a' }) }, { chunk: mkChunk({ noteId: 'b' }) }];
+  assertEq(rankOfFirstGold(results, ['b']), 2);
+  assertEq(rankOfFirstGold(results, ['z']), null);
+  assertEq(rankOfFirstGold(results, []), null);
+});
+
+test('computeMetrics: hit rates, MRR, no-answer accuracy, latency quantiles', () => {
+  const perCase = [
+    { expected: ['a'], rank: 1, baselineRank: 2, noAnswerCorrect: null, latencyMs: 10 },
+    { expected: ['b'], rank: 2, baselineRank: null, noAnswerCorrect: null, latencyMs: 20 },
+    { expected: ['c'], rank: null, baselineRank: 1, noAnswerCorrect: null, latencyMs: 30 },
+    { expected: [], rank: null, baselineRank: null, noAnswerCorrect: true, latencyMs: 5 },
+    { expected: [], rank: null, baselineRank: null, noAnswerCorrect: false, latencyMs: 5 },
+  ];
+  const m = computeMetrics(perCase);
+  assertEq(m.cases, 5); assertEq(m.answerable, 3); assertEq(m.noAnswer, 2);
+  assert(Math.abs(m.hit1 - 1 / 3) < 1e-9);
+  assert(Math.abs(m.hit5 - 2 / 3) < 1e-9);
+  assert(Math.abs(m.mrr - (1 + 0.5) / 3) < 1e-9);
+  assert(Math.abs(m.baselineHit5 - 2 / 3) < 1e-9);
+  assertEq(m.noAnswerAccuracy, 0.5);
+  assert(m.latencyP50 != null && m.latencyP95 >= m.latencyP50);
+});
+
+test('metricsMarkdownTable renders one row per run', () => {
+  const run = {
+    timestamp: '2026-06-11T00:00:00Z',
+    config: { mode: 'lexical', topK: 5 },
+    metrics: { cases: 58, hit1: 0.8, hit5: 1, mrr: 0.89, baselineHit5: 0.95, liftHit5: 0.05, noAnswerAccuracy: 0.75, latencyP50: 3 },
+  };
+  const md = metricsMarkdownTable([run]);
+  assert(md.split('\n').length === 3);
+  assert(md.includes('80%') && md.includes('0.89') && md.includes('lexical'));
+});
+
+// ---------- render ----------
+const out = document.getElementById('out');
+const passed = results.filter(r => r.ok).length;
+out.innerHTML = results.map(r =>
+  `<div class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name}${r.error ? ` — ${r.error}` : ''}</div>`
+).join('');
+document.getElementById('summary').innerHTML =
+  `<span class="${passed === results.length ? 'pass' : 'fail'}">${passed}/${results.length} passed</span>`;
+document.getElementById('results').textContent = JSON.stringify({ passed, total: results.length, failures: results.filter(r => !r.ok) }, null, 2);
+document.title = `Lumen tests — ${passed}/${results.length}`;
 </script>
 </body>
 </html>

@@ -110,9 +110,11 @@ Open `http://localhost:8000`. (A server is required — the app uses ES modules 
 
 ## Roadmap
 
-- Generation-quality evals: citation precision + LLM-as-judge faithfulness, run from the Eval Lab with your key (`citationPrecision` already ships in `pipeline.js`).
+- Per-embedder calibration of the no-answer confidence gate — the experiments above showed thresholds don't transfer between embedding models.
 - Benchmark cases over imported PDFs — long-document retrieval is where chunking earns its keep.
 - Optional sync to a user-owned folder, keeping the no-server promise.
+
+Shipped from earlier roadmaps: generation-quality evals (citation precision, LLM-judged faithfulness, refusal scoring), the Benchmark Builder for custom corpora, and selectable local embedding models.
 
 ---
 

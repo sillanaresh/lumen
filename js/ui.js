@@ -125,6 +125,12 @@ export function download(filename, content, type = 'application/json') {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+// Small ⓘ that explains a technical term on hover/focus. Pure CSS bubble —
+// keyboard reachable, screen-reader readable via aria-label.
+export function infoTip(text, { wide = false } = {}) {
+  return `<span class="info-dot ${wide ? 'info-dot-wide' : ''}" tabindex="0" role="note" aria-label="${escapeHtml(text)}" data-tip="${escapeHtml(text)}">i</span>`;
+}
+
 // Animate the numeric part of an element's text from 0 to its value,
 // preserving any prefix/suffix ("76%", "0.86", "<1ms"). No-op without a
 // number or under prefers-reduced-motion.

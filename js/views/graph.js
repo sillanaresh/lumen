@@ -4,7 +4,7 @@
 
 import { state, on, embedder } from '../store.js';
 import { cosine, stripMarkdown } from '../pipeline.js';
-import { escapeHtml, toast } from '../ui.js';
+import { escapeHtml, toast, infoTip } from '../ui.js';
 import { openNote } from './library.js';
 
 let edgeMode = 'tags'; // 'tags' | 'semantic'
@@ -34,6 +34,7 @@ export function render(root) {
           <button id="gm-tags" role="tab" class="seg-btn ${edgeMode === 'tags' ? 'seg-active' : ''}">Tag links</button>
           <button id="gm-sem" role="tab" class="seg-btn ${edgeMode === 'semantic' ? 'seg-active' : ''}">Semantic links</button>
         </div>
+        ${infoTip('Tag links connect notes that share a tag you gave them — explicit structure. Semantic links are computed from meaning: each note is embedded into a vector by a small model running in this browser, and notes whose vectors point the same way get linked, even with zero words in common.', { wide: true })}
         <button id="graph-list-toggle" class="btn btn-ghost btn-sm" aria-pressed="false" title="Accessible list of nodes and edges">List view</button>
       </div>
       <div class="graph-overlay graph-overlay-br dim mono">drag · scroll to zoom · click a node to open</div>

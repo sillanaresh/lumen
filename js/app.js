@@ -512,7 +512,6 @@ function boot() {
   document.getElementById('topbar').innerHTML = `
     <span class="topbar-title">
       <span class="brand-name">Lumen</span>
-      <span class="brand-ver mono">2.0</span>
       <span id="topbar-view" class="topbar-view dim"></span>
     </span>
     <button id="palette-open" class="palette-trigger" title="Search & commands">

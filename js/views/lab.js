@@ -4,7 +4,7 @@
 
 import { state, corpusMatchesSeed, resetWorkspace, embedder, idbAll, idbSet, idbDel } from '../store.js';
 import { rankChunks, rankOfFirstGold, isNoAnswer, computeMetrics, metricsMarkdownTable } from '../pipeline.js';
-import { escapeHtml, pct, fmtMs, toast, download, scoreBar, countUp } from '../ui.js';
+import { escapeHtml, pct, fmtMs, toast, download, scoreBar, countUp, infoTip } from '../ui.js';
 import { openNote } from './library.js';
 
 let benchmark = null;     // loaded benchmark.json
@@ -21,18 +21,19 @@ export function render(root) {
         <div>
           <div class="kicker">Eval Lab</div>
           <h1>Measured, <span class="grad-text">not vibes</span></h1>
-          <p class="dim lab-sub">Lumen ships its own benchmark: hand-written questions mapped to gold notes, including
+          <p class="dim lab-sub">Lumen ships its own benchmark: 58 hand-written questions, authored against the
+          12 seeded notes <em>before</em> any tuning, each mapped to the note that should answer it — including
           no-answer traps that test hallucination resistance. The runner calls the exact retrieval pipeline Ask uses —
           same functions, same data. Everything runs and persists in this browser.</p>
         </div>
         <div class="lab-controls">
-          <label class="lab-control">mode
+          <label class="lab-control"><span>mode ${infoTip('Lexical ranks chunks by keyword overlap — instant, works offline, no model needed. Semantic + lexical blends meaning-vectors (72%) with keywords (28%) — the same scoring Ask uses once the local embedding model has loaded.', { wide: true })}</span>
             <select id="lab-mode" class="input input-sm">
               <option value="lexical">lexical (no model needed)</option>
               <option value="semantic">semantic + lexical (MiniLM)</option>
             </select>
           </label>
-          <label class="lab-control">top-k
+          <label class="lab-control"><span>top-k ${infoTip('How many chunks retrieval returns per question. Smaller = stricter, less noise in the prompt; larger = better recall, but weaker chunks ride along.')}</span>
             <select id="lab-topk" class="input input-sm">
               <option>3</option><option selected>5</option><option>8</option>
             </select>
@@ -129,7 +130,9 @@ function renderCorpus(root) {
     </div>
     ${drift ? `
       <div class="callout callout-warn">
-        Your workspace differs from the corpus this benchmark was written against, so results may not be comparable.
+        <span>Your workspace differs from the 12 seeded notes these questions were written against, so scores aren't comparable —
+        the gold answers point at notes that may have changed. Benchmarking <em>your own</em> documents needs questions written
+        for them (LLM-drafted, human-approved cases are on the roadmap).</span>
         <button id="lab-reset-corpus" class="btn btn-ghost btn-sm">Reset corpus to benchmark</button>
         <span class="dim">or run anyway — the runner won't stop you.</span>
       </div>` : ''}

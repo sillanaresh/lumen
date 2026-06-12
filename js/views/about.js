@@ -77,6 +77,7 @@ export function render(root) {
       <h2>Roadmap</h2>
       <ul class="about-roadmap">
         <li><span class="mono dim">next</span> Generation-quality evals: citation precision and LLM-as-judge faithfulness scoring, run from the Eval Lab with your key.</li>
+        <li><span class="mono dim">next</span> Benchmark your own corpus: LLM-drafted eval questions over your imported documents, each approved by you before it counts — gold labels stay human.</li>
         <li><span class="mono dim">next</span> Benchmark cases over imported PDFs (long-document retrieval is where chunking earns its keep).</li>
         <li><span class="mono dim">later</span> Optional sync to a user-owned folder — keeping the no-server promise.</li>
       </ul>

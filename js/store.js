@@ -87,8 +87,13 @@ function db() {
         if (!d.objectStoreNames.contains('evalRuns')) d.createObjectStore('evalRuns');
         if (!d.objectStoreNames.contains('benchmarks')) d.createObjectStore('benchmarks');
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        // If a future version opens elsewhere, close so that tab can upgrade.
+        req.result.onversionchange = () => req.result.close();
+        resolve(req.result);
+      };
       req.onerror = () => reject(req.error);
+      req.onblocked = () => reject(new Error('Storage is locked by another Lumen tab — close other Lumen tabs and reload.'));
     });
   }
   return dbPromise;

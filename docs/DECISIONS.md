@@ -6,6 +6,24 @@ choices should be inspectable — same as answers.
 
 ---
 
+## D-017 · The user picks the embedding model, and the eval referees the choice
+
+**Decision:** Three local embedders in Settings — MiniLM (22 MB), BGE-small (34 MB), BGE-base (110 MB). Vectors are cached per model; saved eval runs record which embedder produced them, so the upgrade question ("is 5× the download worth it?") is answered by the compare view, not by vibes.
+
+**Alternative rejected:** Server-side embeddings — better quality ceiling, but it costs the maker money per user and breaks the only promise that differentiates the product (notes never leave the browser).
+
+## D-016 · Custom benchmarks: provenance is the gold label, humans approve everything
+
+**Decision:** The Benchmark Builder drafts each question *from a specific chunk*, so the gold answer is established by provenance — the drafting model never judges correctness. Every case is human-approved (edit/exclude) before it counts; users can also upload their own JSON (validated against the workspace). Refusal traps come from an out-of-corpus pool.
+
+**Bias acknowledged, not hidden:** LLM-phrased questions share vocabulary with their source, which flatters retrieval. Mitigations: the draft prompt demands paraphrase, custom runs are labeled and never compared against the hand-written set, and uploading human-authored cases remains the trustworthy path.
+
+## D-015 · Faithfulness judging: strict JSON, defensive parsing, failures shown
+
+**Decision:** Generation metrics use the user's own model as judge (score 1–5 against the retrieved context, strict JSON, fences stripped, one retry). Unparseable verdicts are marked `judge_error`, excluded from the average, and **counted visibly** in the tile. Refusal detection doesn't use the judge at all — the system prompt mandates an exact decline sentence, so it's a deterministic string check.
+
+**Alternatives rejected:** A separate hardcoded judge model (dies the same death as the hardcoded model list, D-013) and free-text judging (unscoreable). Same-model-as-judge has self-grading bias — accepted and disclosed, because BYOK means there is no neutral third model to insist on.
+
 ## D-014 · Light theme is the default
 
 **Decision:** Two themes from one token set — warm paper (default) and deep night — with a persisted toggle, applied before first paint.

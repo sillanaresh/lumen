@@ -23,6 +23,8 @@ import {
   contentHash, stripMarkdown, lexicalScore, cosine, markdownBlocks, chunkNote, chunkAll,
   rankChunks, isNoAnswer, buildPrompt, parseCitations, citationPrecision,
   rankOfFirstGold, computeMetrics, metricsMarkdownTable, estimateTokens,
+  isDecline, buildJudgePrompt, parseJudgeOutput, validateBenchmark, computeGenMetrics,
+  buildDraftPrompt, parseDraftOutput,
   CHUNK_SIZE_CHARS,
 } from './js/pipeline.js';
 
@@ -235,6 +237,106 @@ test('metricsMarkdownTable renders one row per run', () => {
   const md = metricsMarkdownTable([run]);
   assert(md.split('\n').length === 3);
   assert(md.includes('80%') && md.includes('0.89') && md.includes('lexical'));
+});
+
+// ---------- golden chunker fixtures ----------
+// Frozen expected outputs. Changing chunking constants/logic must update these
+// numbers CONSCIOUSLY — that's the point of goldens.
+test('golden: short note → 1 chunk, stable hash', () => {
+  const ch = chunkNote({ id: 'g1', title: 'Golden short', content: '# Golden short\n\nOne small paragraph that stays a single chunk.' });
+  assertEq(ch.length, 1);
+  assertEq(ch[0].contentHash, 'vdsfem');
+});
+test('golden: 3-section note → 3 chunks with heading paths', () => {
+  const ch = chunkNote({ id: 'g2', title: 'Golden sections', content: '# Golden sections\n\n' + 'Alpha sentence about retrieval practice. '.repeat(18) + '\n\n## Beta part\n\n' + 'Beta sentence about consolidation. '.repeat(18) + '\n\n## Gamma part\n\n' + 'Gamma sentence about interleaving. '.repeat(18) });
+  assertEq(ch.length, 3);
+  assertEq(ch.map(c => c.headingPath).join('|'), 'Golden sections|Golden sections › Beta part|Golden sections › Gamma part');
+  assertEq(ch.map(c => c.contentHash).join(','), '1p303uc,7gzfye,1qizgp0');
+});
+test('golden: long fence merges into one intact chunk', () => {
+  const ch = chunkNote({ id: 'g3', title: 'Golden fence', content: '# Golden fence\n\nIntro line.\n\n```js\nconst keep = "together";\n' + 'line();\n'.repeat(40) + '```\n\nOutro line.' });
+  assertEq(ch.length, 1);
+  assertEq(ch[0].contentHash, 'umv7i3');
+});
+
+// ---------- decline detection & judge parsing ----------
+test('isDecline matches the mandated refusal phrase, case-insensitive', () => {
+  assert(isDecline("Your notes don't seem to cover this."));
+  assert(isDecline("Sorry — your notes DON'T SEEM TO COVER THIS topic."));
+  assert(!isDecline('Spaced repetition flattens the forgetting curve [n02.1].'));
+});
+test('parseJudgeOutput: clean JSON', () => {
+  const v = parseJudgeOutput('{"score": 4, "unsupported_claims": ["claim x"]}');
+  assertEq(v.score, 4); assertEq(v.unsupported.length, 1);
+});
+test('parseJudgeOutput: fenced + prose-wrapped JSON', () => {
+  const v = parseJudgeOutput('Here is my grade:\n```json\n{"score": 5, "unsupported_claims": []}\n```\nDone.');
+  assertEq(v.score, 5);
+});
+test('parseJudgeOutput: malformed / out-of-range → null (caller retries)', () => {
+  assertEq(parseJudgeOutput('I would rate this a 4 out of 5.'), null);
+  assertEq(parseJudgeOutput('{"score": 9}'), null);
+  assertEq(parseJudgeOutput(''), null);
+});
+test('judge prompt demands strict JSON and carries question/context/answer', () => {
+  const p = buildJudgePrompt('q?', [{ chunk: mkChunk({ chunkId: 'n01.1', text: 'ctx' }) }], 'the answer');
+  assert(p.messages[0].content.includes('JSON'));
+  assert(p.messages[1].content.includes('q?') && p.messages[1].content.includes('the answer') && p.messages[1].content.includes('[n01.1]'));
+});
+
+// ---------- draft parsing ----------
+test('parseDraftOutput extracts a question, rejects junk', () => {
+  assertEq(parseDraftOutput('{"question": "Why does spacing help memory?"}'), 'Why does spacing help memory?');
+  assertEq(parseDraftOutput('{"question": "hi"}'), null, 'too short');
+  assertEq(parseDraftOutput('no json here'), null);
+});
+test('draft prompt forbids verbatim copying and includes the passage', () => {
+  const p = buildDraftPrompt(mkChunk({ noteTitle: 'Sleep', text: 'hippocampus replays the day' }));
+  assert(p.messages[0].content.toLowerCase().includes('not copy') || p.messages[0].content.includes('do NOT copy'));
+  assert(p.messages[1].content.includes('hippocampus'));
+});
+
+// ---------- benchmark validation ----------
+test('validateBenchmark accepts a good set and infers categories', () => {
+  const v = validateBenchmark({ cases: [
+    { id: 'a', question: 'q1?', expected: ['n01'] },
+    { id: 'b', question: 'q2?', expected: [] },
+  ] }, new Set(['n01']));
+  assert(v.ok, v.errors.join('; '));
+  assertEq(v.cases[0].category, 'single-hop');
+  assertEq(v.cases[1].category, 'no-answer');
+});
+test('validateBenchmark rejects unknown gold notes, duplicates, missing questions', () => {
+  const v = validateBenchmark({ cases: [
+    { id: 'a', question: 'q?', expected: ['ghost'] },
+    { id: 'a', expected: [] },
+  ] }, new Set(['n01']));
+  assert(!v.ok);
+  assert(v.errors.some(e => e.includes('ghost')));
+  assert(v.errors.some(e => e.includes('Duplicate')));
+  assert(v.errors.some(e => e.includes('question')));
+});
+
+// ---------- generation metrics ----------
+test('computeGenMetrics aggregates precision, faithfulness, refusals; judge errors excluded', () => {
+  const g = computeGenMetrics([
+    { expected: ['a'], citationPrecision: 1, faithfulness: 5, judgeError: false, genDeclined: false, genMs: 100, outTokens: 50 },
+    { expected: ['b'], citationPrecision: 0.5, faithfulness: null, judgeError: true, genDeclined: false, genMs: 300, outTokens: 70 },
+    { expected: [], citationPrecision: null, faithfulness: null, judgeError: false, genDeclined: true, genMs: 200, outTokens: 10 },
+    { expected: [], citationPrecision: null, faithfulness: null, judgeError: false, genDeclined: false, genMs: 200, outTokens: 80 },
+  ]);
+  assertEq(g.generated, 4);
+  assert(Math.abs(g.citationPrecision - 0.75) < 1e-9);
+  assertEq(g.faithfulness, 5, 'judge-error case excluded from average');
+  assertEq(g.judgeErrors, 1);
+  assertEq(g.genNoAnswerAccuracy, 0.5);
+});
+test('markdown table grows gen columns only when a run has them', () => {
+  const base = { timestamp: '2026-06-12T00:00:00Z', config: { mode: 'lexical', topK: 5 }, metrics: { cases: 58, hit1: 0.8, hit5: 1, mrr: 0.9, baselineHit5: 1, liftHit5: 0, noAnswerAccuracy: 0.75, latencyP50: 1 } };
+  assert(!metricsMarkdownTable([base]).includes('Faithfulness'));
+  const withGen = { ...base, metrics: { ...base.metrics, gen: { citationPrecision: 0.9, faithfulness: 4.4, genNoAnswerAccuracy: 1 } } };
+  const md = metricsMarkdownTable([withGen]);
+  assert(md.includes('Faithfulness') && md.includes('4.4/5') && md.includes('90%'));
 });
 
 // ---------- render ----------

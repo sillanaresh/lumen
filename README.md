@@ -26,12 +26,19 @@ Run it yourself: open the **Eval Lab** tab → *Run benchmark*. Lexical mode fin
 
 | Run | Mode | Top-k | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer | p50 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2026-06-11 | lexical | 5 | 58 | 76% | 98% | 0.86 | 98% | +0% | 75% | <1ms |
+| 2026-06-12 | lexical | 3 | 58 | 76% | 98% | 0.86 | 98% | +0% | 75% | <1ms |
+| 2026-06-12 | lexical | 5 | 58 | 76% | 98% | 0.86 | 98% | +0% | 75% | <1ms |
+| 2026-06-12 | lexical | 8 | 58 | 76% | 98% | 0.86 | 98% | +0% | 75% | <1ms |
+| 2026-06-12 | semantic · MiniLM | 5 | 58 | **86%** | **100%** | **0.92** | 98% | +2% | **100%** | 2ms |
+| 2026-06-12 | semantic · BGE-small | 5 | 58 | 84% | 100% | 0.92 | 98% | +2% | **50%** | 4ms |
 
-Two honest caveats, because honest numbers are the product:
+What the experiments actually taught us (full analysis in the eval report):
 
-- **Chunking shows zero lift here by construction** — each seeded note fits in a single chunk, so chunked and whole-note retrieval coincide. Chunking's value appears on long PDF/URL imports (where one-vector-per-document retrieval collapses) and in **citation granularity**: answers point at the exact passage, not a whole document.
-- **No-answer accuracy is 75%, not 100%** — two of eight hallucination traps slip past the confidence gate, and the failure analysis (incidental keyword overlap, e.g. *"model"* matching the *Mental models* note title) is written up in the eval report. Knowing *which* questions fool the gate is the point of having one.
+- **Semantic retrieval earns its keep**: +10 points of Hit@1 over keywords, and it fixes *both* hallucination traps that fooled the lexical gate (incidental keyword overlap like *"model"* matching the *Mental models* title doesn't fool cosine similarity).
+- **The "better" embedder scored worse where it matters most.** BGE-small matches MiniLM on ranking but drops refusal accuracy to 50% — its similarity scores run hotter, so the no-answer threshold calibrated for MiniLM lets weak matches through. *Confidence thresholds don't transfer across embedders* — which is why the embedder is user-selectable and every eval run records which one produced it.
+- **Chunking shows zero lift here by construction** — each seeded note fits in one chunk. Its value appears on long PDF/URL imports and in citation granularity (answers point at the exact passage).
+
+With an API key, the Lab also scores **generation**: citation precision, LLM-judged faithfulness (strict-JSON judge, defensive parsing, errors counted visibly), and whether the model refuses the traps. And the **Benchmark Builder** drafts cases for *your own* corpus — questions generated from specific chunks so the gold label is provenance, every case human-approved, or upload your own JSON.
 
 Benchmark: [`benchmark.json`](benchmark.json) · Methodology and caveats: [`docs/eval-report.md`](docs/eval-report.md)
 

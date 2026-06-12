@@ -345,7 +345,7 @@ function renderRail(root) {
     <section class="rail-section">
       <div class="ev-step"><span class="ev-step-n mono">1</span> Embed query</div>
       <div class="ev-meta dim">${rec.mode === 'semantic'
-        ? `MiniLM-L6-v2 · 384d · in this browser · ${fmtMs(rec.timings.embedMs)}`
+        ? `${escapeHtml(embedder.current().short)} · ${embedder.current().dims}d · in this browser · ${fmtMs(rec.timings.embedMs)}`
         : 'skipped — lexical mode (local model unavailable or still loading)'}</div>
     </section>
     <section class="rail-section">

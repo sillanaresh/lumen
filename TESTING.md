@@ -45,5 +45,17 @@ clear site data for a true first-run.
 23. PDF: drop a text-based PDF → parsing progress → editable preview → *Add to workspace* → toast with *Open note*; note is chunked and in the graph. Re-import the same file → duplicate warning. A scanned/image PDF → "appears to be scanned images" error, no empty note created.
 24. URL: paste an article URL → fetched via r.jina.ai → preview → save. A bogus URL → friendly failure message.
 
+## Eval Lab — generation metrics & builder (needs API key)
+25. Tick *generation* → Run → progress shows retrieval/generating/judging phases; tiles add Citation precision, Faithfulness (with judge-error count), Gen refusal; drill-down shows each answer, its citations, and judge-flagged claims. Cancel mid-run saves a partial.
+26. Builder → *Draft with AI* → drafts appear with their gold note named; edit one, exclude one, save → benchmark selector switches to custom; run it → run history labels it `custom`.
+27. Builder → *Template* downloads a JSON skeleton; *Upload JSON* with a bad gold note id is rejected with the reason; a valid file saves and selects.
+28. Edit a note after creating a custom benchmark → corpus line warns the workspace changed since creation.
+29. Settings → switch embedding model to BGE-small → toast announces re-index; run a semantic eval → run history shows `semantic·BGE-small`; compare with a MiniLM run → deltas visible (expect refusal to drop — that finding is real and documented).
+
+## Ingestion edge cases
+30. PDF: >25 MB file rejected with size guidance; password-protected PDF names the problem; 0-byte file rejected; >60-page PDF imports with a "first 60 pages" notice.
+31. URL: a Medium/blog article imports with images replaced by `(image: caption)`; a login-walled page is detected and explained; a bogus domain reports the reader as unreachable; a >25s page times out with guidance.
+
 ## Shell
-25. ⌘K palette: type a word from a note → note results navigate; commands (Run benchmark, Settings, New note) work; arrow keys + Enter navigate. Legacy hash `#eval` redirects to the Eval Lab. Narrow window (<920px): bottom nav appears, graph is replaced by a notice, Library/Ask/Lab remain usable.
+32. ⌘K palette: type a word from a note → note results navigate; commands (Run benchmark, Settings, New note) work; arrow keys + Enter navigate. Legacy hash `#eval` redirects to the Eval Lab. Narrow window (<920px): bottom nav appears, graph is replaced by a notice, Library/Ask/Lab remain usable.
+33. Headless check: `#/lab?auto=retrieval` auto-runs the lexical benchmark and writes machine-readable JSON into `<pre id="results">`.

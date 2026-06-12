@@ -63,9 +63,18 @@ export function fetchModelCatalog() {
   return catalogPromise;
 }
 
+// Local embedding models (transformers.js / ONNX). All run fully in-browser;
+// bigger = better retrieval, slower first index, larger one-time download.
+export const EMBEDDERS = [
+  { id: 'minilm', hf: 'Xenova/all-MiniLM-L6-v2', label: 'MiniLM-L6-v2 — 22 MB, fastest', short: 'MiniLM', dims: 384 },
+  { id: 'bge-small', hf: 'Xenova/bge-small-en-v1.5', label: 'BGE-small-en-v1.5 — 34 MB, better quality', short: 'BGE-small', dims: 384 },
+  { id: 'bge-base', hf: 'Xenova/bge-base-en-v1.5', label: 'BGE-base-en-v1.5 — 110 MB, best quality', short: 'BGE-base', dims: 768 },
+];
+export const DEFAULT_EMBEDDER = 'minilm';
+
 // ---------- Tiny IndexedDB promise wrapper ----------
 const IDB_NAME = 'lumen2';
-const IDB_VERSION = 1;
+const IDB_VERSION = 2; // v2 adds the 'benchmarks' store
 let dbPromise = null;
 
 function db() {
@@ -76,6 +85,7 @@ function db() {
         const d = req.result;
         if (!d.objectStoreNames.contains('embeddings')) d.createObjectStore('embeddings');
         if (!d.objectStoreNames.contains('evalRuns')) d.createObjectStore('evalRuns');
+        if (!d.objectStoreNames.contains('benchmarks')) d.createObjectStore('benchmarks');
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -120,10 +130,16 @@ function lsJson(key, fallback) {
 }
 
 export function loadSettings() {
-  const s = { apiKey: '', model: DEFAULT_MODEL, ...lsJson(LS_SETTINGS, {}) };
+  const s = { apiKey: '', model: DEFAULT_MODEL, embedder: DEFAULT_EMBEDDER, ...lsJson(LS_SETTINGS, {}) };
   if (RETIRED_MODELS.has(s.model)) s.model = DEFAULT_MODEL;
+  if (!EMBEDDERS.some(e => e.id === s.embedder)) s.embedder = DEFAULT_EMBEDDER;
   return s;
 }
+
+// ---------- Custom benchmark (one per workspace, IndexedDB) ----------
+export const saveCustomBenchmark = (b) => idbSet('benchmarks', 'custom', b);
+export const loadCustomBenchmark = () => idbGet('benchmarks', 'custom').catch(() => null);
+export const deleteCustomBenchmark = () => idbDel('benchmarks', 'custom');
 export function saveSettings(s) { localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); }
 
 export function loadFeedback() { return lsJson(LS_FEEDBACK, []); }
@@ -223,10 +239,10 @@ export function resetWorkspace() {
 
 // True when the workspace still matches the corpus the benchmark was written
 // against (used for the Eval Lab drift warning).
+const notesHash = (notes) => contentHash(notes.map(n => `${n.id}\n${n.title}\n${n.content}`).sort().join('\n---\n'));
+export function workspaceHash() { return notesHash(state.notes); }
 export function corpusMatchesSeed() {
-  if (state.notes.length !== SEED_NOTES.length) return false;
-  const hash = (notes) => contentHash(notes.map(n => `${n.id}\n${n.title}\n${n.content}`).sort().join('\n---\n'));
-  return hash(state.notes) === hash(SEED_NOTES);
+  return state.notes.length === SEED_NOTES.length && notesHash(state.notes) === notesHash(SEED_NOTES);
 }
 
 export function allTags() {
@@ -249,14 +265,35 @@ export const embedder = {
   error: null,
   _pipe: null,
   _loading: null,
-  _cache: new Map(),       // contentHash → Float32Array (session)
+  _modelId: null,          // EMBEDDERS id the pipe was built for
+  _cache: new Map(),       // `${modelId}:${contentHash}` → Float32Array (session)
   _indexReady: null,
 
   invalidate() { this._indexReady = null; },
 
+  current() {
+    return EMBEDDERS.find(e => e.id === loadSettings().embedder) || EMBEDDERS[0];
+  },
+
+  // Called when the user picks a different local model in Settings.
+  reset() {
+    this._pipe = null;
+    this._loading = null;
+    this._modelId = null;
+    this._indexReady = null;
+    this.status = 'idle';
+    this.progress = 0;
+    this.error = null;
+    emit('embedder');
+  },
+
+  _key(contentHash) { return `${this.current().id}:${contentHash}`; },
+
   async load() {
-    if (this._pipe) return this._pipe;
-    if (this._loading) return this._loading;
+    const want = this.current();
+    if (this._pipe && this._modelId === want.id) return this._pipe;
+    if (this._loading && this._modelId === want.id) return this._loading;
+    this._modelId = want.id;
     this.status = 'loading';
     this.progress = 0;
     emit('embedder');
@@ -265,7 +302,7 @@ export const embedder = {
         const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         env.allowLocalModels = false;
         env.useBrowserCache = true;
-        this._pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+        this._pipe = await pipeline('feature-extraction', want.hf, {
           progress_callback: (d) => {
             if (d && typeof d.progress === 'number') {
               this.progress = Math.max(this.progress, Math.round(d.progress));
@@ -301,16 +338,18 @@ export const embedder = {
       await this.load();
       const missing = [];
       for (const c of state.chunks) {
-        if (this._cache.has(c.contentHash)) continue;
-        const cached = await idbGet('embeddings', c.contentHash).catch(() => null);
-        if (cached) this._cache.set(c.contentHash, new Float32Array(cached));
+        const key = this._key(c.contentHash);
+        if (this._cache.has(key)) continue;
+        const cached = await idbGet('embeddings', key).catch(() => null);
+        if (cached) this._cache.set(key, new Float32Array(cached));
         else missing.push(c);
       }
       for (let i = 0; i < missing.length; i++) {
         const c = missing[i];
+        const key = this._key(c.contentHash);
         const vec = await this.embed(`${c.noteTitle}\n${c.headingPath}\n${c.text}`);
-        this._cache.set(c.contentHash, vec);
-        idbSet('embeddings', c.contentHash, vec.buffer.slice(0)).catch(() => {});
+        this._cache.set(key, vec);
+        idbSet('embeddings', key, vec.buffer.slice(0)).catch(() => {});
         onProgress?.(i + 1, missing.length);
         // yield so a big import never freezes the UI
         if (i % 4 === 3) await new Promise(r => setTimeout(r, 0));
@@ -320,7 +359,7 @@ export const embedder = {
     return this._indexReady;
   },
 
-  getVec(chunk) { return this._cache.get(chunk.contentHash) || null; },
+  getVec(chunk) { return this._cache.get(this._key(chunk.contentHash)) || null; },
 
   // Mean of chunk vectors per note — used for semantic graph edges.
   noteVec(noteId) {

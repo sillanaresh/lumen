@@ -69,6 +69,48 @@ export async function streamChat({ apiKey, model, messages, onToken, signal }) {
   return total;
 }
 
+// Non-streaming completion for eval work (judging, drafting). Retries 429s
+// with exponential backoff (1s/2s/4s) before surfacing the rate limit.
+export async function chatOnce({ apiKey, model, messages, signal, maxTokens = 600, backoff = [1000, 2000, 4000] }) {
+  if (!apiKey) throw new AskError('no-key', 'No API key configured');
+  for (let attempt = 0; ; attempt++) {
+    let resp;
+    try {
+      resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal,
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': location.origin,
+          'X-Title': 'Lumen',
+        },
+        body: JSON.stringify({ model, messages, stream: false, temperature: 0.2, max_tokens: maxTokens }),
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      throw new AskError('network', String(err.message || err));
+    }
+    if (resp.status === 429 && attempt < backoff.length) {
+      await new Promise((res, rej) => {
+        const t = setTimeout(res, backoff[attempt]);
+        signal?.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('aborted', 'AbortError')); }, { once: true });
+      });
+      continue;
+    }
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      if (resp.status === 401 || resp.status === 403) throw new AskError('auth', text.slice(0, 200));
+      if (resp.status === 429) throw new AskError('rate-limit', text.slice(0, 200));
+      throw new AskError('api', `${resp.status}: ${text.slice(0, 200)}`);
+    }
+    const data = await resp.json().catch(() => null);
+    const content = data?.choices?.[0]?.message?.content || '';
+    if (!content.trim()) throw new AskError('empty', 'Model returned no content');
+    return content;
+  }
+}
+
 // Cheap "test key" ping — fetches the models list with the key.
 export async function testKey(apiKey) {
   const resp = await fetch('https://openrouter.ai/api/v1/key', {

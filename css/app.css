@@ -767,6 +767,16 @@ html[data-theme="dark"] .prose code { color: var(--accent-2); }
 .case-retrieved { display: flex; flex-direction: column; gap: 4px; }
 .case-retrieved .ev-score { margin-left: 0; }
 
+.lab-gen-row { display: inline-flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 11px; }
+.case-gen { border-top: 1px dashed var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.case-answer { font-size: 12.5px; color: var(--text-2); background: var(--wash-1); border-radius: var(--radius-sm); padding: 8px 10px; white-space: pre-wrap; }
+.bb-list { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.bb-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: center; }
+.bb-row .bb-q { grid-column: 1; }
+.bb-row .bb-toggle { grid-column: 2; grid-row: 1; }
+.bb-gold { grid-column: 1 / -1; font-size: 10.5px; padding-left: 4px; }
+.bb-row-off { opacity: 0.45; }
+
 .run-row {
   display: flex; align-items: center; gap: 8px; padding: 6px;
   border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px;

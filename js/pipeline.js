@@ -247,6 +247,114 @@ Rules:
   };
 }
 
+// The exact refusal sentence the system prompt mandates — detecting it is how
+// generation-time no-answer behavior is scored, deterministically.
+export const DECLINE_PHRASE = "your notes don't seem to cover this";
+export function isDecline(answer) {
+  return String(answer || '').toLowerCase().includes(DECLINE_PHRASE);
+}
+
+// ---------- LLM-as-judge (faithfulness) ----------
+
+export function buildJudgePrompt(question, results, answer) {
+  const context = results.map(({ chunk }) =>
+    `[${chunk.chunkId}] ${stripMarkdown(chunk.text).slice(0, 1100)}`).join('\n\n');
+  const system = `You are a strict grader of grounded question-answering. Score how faithful the ANSWER is to the CONTEXT.
+Rubric: 5 = every factual claim is supported by the context; 4 = supported with trivial rephrasing; 3 = minor unsupported additions; 2 = significant unsupported claims; 1 = fabricated or contradicts the context.
+Respond with ONLY a JSON object, no prose, no code fences: {"score": <1-5>, "unsupported_claims": ["..."]}`;
+  const user = `QUESTION:\n${question}\n\nCONTEXT:\n${context || '(empty)'}\n\nANSWER:\n${answer}`;
+  return { messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+}
+
+// Parse judge output defensively: strip fences, find the first JSON object,
+// validate the shape. Returns {score, unsupported} or null (caller may retry).
+export function parseJudgeOutput(text) {
+  const cleaned = String(text || '').replace(/```(?:json)?/gi, '').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const obj = JSON.parse(match[0]);
+    const score = Math.round(Number(obj.score));
+    if (!Number.isFinite(score) || score < 1 || score > 5) return null;
+    const unsupported = Array.isArray(obj.unsupported_claims)
+      ? obj.unsupported_claims.map(String).slice(0, 10) : [];
+    return { score, unsupported };
+  } catch { return null; }
+}
+
+export const BACKOFF_MS = [1000, 2000, 4000];
+
+// ---------- Benchmark schema validation (built-in and user-uploaded) ----------
+
+export function validateBenchmark(obj, knownNoteIds = null) {
+  const errors = [];
+  if (!obj || typeof obj !== 'object') return { ok: false, errors: ['Not a JSON object.'], cases: [] };
+  if (!Array.isArray(obj.cases) || obj.cases.length === 0) errors.push('"cases" must be a non-empty array.');
+  const seen = new Set();
+  const cases = (obj.cases || []).map((c, i) => {
+    const id = String(c.id || `q${String(i + 1).padStart(3, '0')}`);
+    if (seen.has(id)) errors.push(`Duplicate case id "${id}".`);
+    seen.add(id);
+    if (!c.question || typeof c.question !== 'string') errors.push(`Case ${id}: missing "question".`);
+    const expected = Array.isArray(c.expected) ? c.expected.map(String) : [];
+    if (knownNoteIds) {
+      for (const noteId of expected) {
+        if (!knownNoteIds.has(noteId)) errors.push(`Case ${id}: gold note "${noteId}" is not in this workspace.`);
+      }
+    }
+    return {
+      id,
+      question: String(c.question || ''),
+      expected,
+      category: c.category || (expected.length === 0 ? 'no-answer' : expected.length > 1 ? 'multi-hop' : 'single-hop'),
+      difficulty: c.difficulty || 'easy',
+      rubric: String(c.rubric || ''),
+    };
+  });
+  return { ok: errors.length === 0, errors, cases };
+}
+
+// ---------- Generation metrics ----------
+
+// rows: { expected, citationPrecision|null, faithfulness|null, judgeError, genDeclined|null, genMs, outTokens }
+export function computeGenMetrics(rows) {
+  const avg = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  const answerable = rows.filter(r => r.expected.length > 0);
+  const traps = rows.filter(r => r.expected.length === 0);
+  return {
+    generated: rows.length,
+    citationPrecision: avg(answerable.map(r => r.citationPrecision).filter(v => v != null)),
+    faithfulness: avg(answerable.map(r => r.faithfulness).filter(v => v != null)),
+    judgeErrors: rows.filter(r => r.judgeError).length,
+    genNoAnswerAccuracy: traps.length ? traps.filter(r => r.genDeclined === true).length / traps.length : null,
+    genLatencyP50: (() => {
+      const xs = rows.map(r => r.genMs).filter(Number.isFinite).sort((a, b) => a - b);
+      return xs.length ? xs[Math.floor(xs.length / 2)] : null;
+    })(),
+    outTokensAvg: avg(rows.map(r => r.outTokens).filter(Number.isFinite)),
+  };
+}
+
+// Prompt for drafting benchmark questions FROM a chunk — provenance is the
+// gold label, so the drafting model never gets to judge correctness.
+export function buildDraftPrompt(chunk) {
+  const system = `You write evaluation questions for a retrieval benchmark.
+Given one PASSAGE from a personal note, write ONE natural question that this passage clearly answers, phrased the way a person would ask from memory — do NOT copy distinctive nouns or phrasing from the passage verbatim when a paraphrase exists.
+Respond with ONLY JSON, no fences: {"question": "..."}`;
+  const user = `PASSAGE (from note "${chunk.noteTitle}"):\n${stripMarkdown(chunk.text).slice(0, 1100)}`;
+  return { messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+}
+
+export function parseDraftOutput(text) {
+  const cleaned = String(text || '').replace(/```(?:json)?/gi, '').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const q = String(JSON.parse(match[0]).question || '').trim();
+    return q.length >= 8 ? q : null;
+  } catch { return null; }
+}
+
 // Extract [n01.2]-style citations from generated text.
 export function parseCitations(text) {
   const out = [];
@@ -302,11 +410,20 @@ export function computeMetrics(perCase) {
 
 export function metricsMarkdownTable(runs) {
   const p = (n) => Number.isFinite(n) ? `${Math.round(n * 100)}%` : '—';
-  const head = '| Run | Mode | Top-k | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer | p50 |';
-  const sep = '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|';
+  const hasGen = runs.some(r => r.metrics.gen);
+  const head = '| Run | Mode | Top-k | Cases | Hit@1 | Hit@5 | MRR | Whole-note Hit@5 | Lift | No-answer | p50 |'
+    + (hasGen ? ' Cite-prec | Faithfulness | Gen-refusal |' : '');
+  const sep = '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|' + (hasGen ? '---:|---:|---:|' : '');
   const rows = runs.map(r => {
     const m = r.metrics;
-    return `| ${new Date(r.timestamp).toISOString().slice(0, 10)} | ${r.config.mode} | ${r.config.topK} | ${m.cases} | ${p(m.hit1)} | ${p(m.hit5)} | ${m.mrr.toFixed(2)} | ${p(m.baselineHit5)} | ${m.liftHit5 >= 0 ? '+' : ''}${p(m.liftHit5)} | ${p(m.noAnswerAccuracy)} | ${m.latencyP50 != null ? Math.round(m.latencyP50) + 'ms' : '—'} |`;
+    let row = `| ${new Date(r.timestamp).toISOString().slice(0, 10)} | ${r.config.mode}${r.config.embedder ? '·' + r.config.embedder : ''} | ${r.config.topK} | ${m.cases} | ${p(m.hit1)} | ${p(m.hit5)} | ${m.mrr.toFixed(2)} | ${p(m.baselineHit5)} | ${m.liftHit5 >= 0 ? '+' : ''}${p(m.liftHit5)} | ${p(m.noAnswerAccuracy)} | ${m.latencyP50 != null ? Math.round(m.latencyP50) + 'ms' : '—'} |`;
+    if (hasGen) {
+      const g = m.gen;
+      row += g
+        ? ` ${p(g.citationPrecision)} | ${g.faithfulness != null ? g.faithfulness.toFixed(1) + '/5' : '—'} | ${p(g.genNoAnswerAccuracy)} |`
+        : ' — | — | — |';
+    }
+    return row;
   });
   return [head, sep, ...rows].join('\n');
 }

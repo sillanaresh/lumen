@@ -76,8 +76,10 @@ export function render(root) {
     <section class="about-section">
       <h2>Roadmap</h2>
       <ul class="about-roadmap">
-        <li><span class="mono dim">next</span> Generation-quality evals: citation precision and LLM-as-judge faithfulness scoring, run from the Eval Lab with your key.</li>
-        <li><span class="mono dim">next</span> Benchmark your own corpus: LLM-drafted eval questions over your imported documents, each approved by you before it counts — gold labels stay human.</li>
+        <li><span class="mono dim">shipped</span> Generation evals — citation precision, LLM-judged faithfulness, and refusal scoring, run from the Eval Lab with your key.</li>
+        <li><span class="mono dim">shipped</span> Benchmark Builder — AI drafts questions from your chunks (provenance = gold label), you approve each one; or upload your own JSON.</li>
+        <li><span class="mono dim">shipped</span> Choice of local embedding model (22–110 MB), with eval runs recording which embedder produced them.</li>
+        <li><span class="mono dim">next</span> Per-embedder confidence-gate calibration — the eval showed thresholds don't transfer between models.</li>
         <li><span class="mono dim">next</span> Benchmark cases over imported PDFs (long-document retrieval is where chunking earns its keep).</li>
         <li><span class="mono dim">later</span> Optional sync to a user-owned folder — keeping the no-server promise.</li>
       </ul>

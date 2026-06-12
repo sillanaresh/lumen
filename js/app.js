@@ -2,7 +2,7 @@
 
 import { initWorkspace, state, on, embedder, loadSettings, saveSettings, loadFeedback,
          createNote, duplicateOf, resetWorkspace, isOnboarded, setOnboarded,
-         FALLBACK_MODELS, fetchModelCatalog, DEFAULT_MODEL, idbCount } from './store.js';
+         FALLBACK_MODELS, fetchModelCatalog, DEFAULT_MODEL, EMBEDDERS, idbCount } from './store.js';
 import { stripMarkdown } from './pipeline.js';
 import { testKey } from './openrouter.js';
 import { el, escapeHtml, toast, openModal, download } from './ui.js';
@@ -28,7 +28,7 @@ export function navigate(hash) {
 }
 
 function parseHash() {
-  const h = location.hash.replace(/^#\/?/, '');
+  const h = location.hash.replace(/^#\/?/, '').split('?')[0]; // tolerate ?flags like auto=retrieval
   // legacy deep links from v0.x
   if (h === 'eval' || h === 'quality') return { name: 'lab', parts: [] };
   if (h === 'app' || h === '') return { name: 'graph', parts: [] };
@@ -116,6 +116,15 @@ export function openSettings() {
       <input id="set-model-custom" class="input mono" placeholder="vendor/model-id — browse openrouter.ai/models" value="" hidden style="margin-top:8px" />
       <p class="dim set-hint" id="set-model-hint">Free models cost $0 (rate-limited). With credits on your key, pick <em>Custom</em> and paste any model ID from
         <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>. Answers must cite chunks regardless of model.</p>
+    </section>
+    <section class="set-section">
+      <h3 class="rail-title">Local embedding model</h3>
+      <select id="set-embedder" class="input">
+        ${EMBEDDERS.map(e => `<option value="${escapeHtml(e.id)}" ${e.id === s.embedder ? 'selected' : ''}>${escapeHtml(e.label)}</option>`).join('')}
+      </select>
+      <p class="dim set-hint">Powers semantic search, graph links, and retrieval — entirely in this browser (downloaded once, then cached).
+      Switching models rebuilds the vector index on next semantic use; saved eval runs record which embedder produced them, so you can
+      compare models in the Eval Lab before committing.</p>
     </section>
     <section class="set-section">
       <h3 class="rail-title">What leaves your machine</h3>
@@ -216,9 +225,16 @@ export function openSettings() {
   cancel.addEventListener('click', m.close);
   save.addEventListener('click', () => {
     const picked = modelSel.value === '__custom' ? modelCustom.value.trim() : modelSel.value;
-    saveSettings({ ...s, apiKey: body.querySelector('#set-key').value.trim(), model: picked || DEFAULT_MODEL });
+    const newEmbedder = body.querySelector('#set-embedder').value;
+    const embedderChanged = newEmbedder !== s.embedder;
+    saveSettings({ ...s, apiKey: body.querySelector('#set-key').value.trim(), model: picked || DEFAULT_MODEL, embedder: newEmbedder });
+    if (embedderChanged) {
+      embedder.reset();
+      toast(`Embedding model switched to ${EMBEDDERS.find(e => e.id === newEmbedder)?.short} — vectors rebuild on next semantic use.`, { kind: 'success', timeout: 5000 });
+    } else {
+      toast('Settings saved in this browser.', { kind: 'success' });
+    }
     m.close();
-    toast('Settings saved in this browser.', { kind: 'success' });
     route(); // refresh hints (e.g., ask composer model hint)
   });
 }
@@ -351,31 +367,51 @@ function openImport() {
   });
   file.addEventListener('change', () => file.files?.[0] && handlePdf(file.files[0]));
 
+  const PDF_MAX_BYTES = 25 * 1024 * 1024;
+  const PDF_MAX_PAGES = 60;
+  const IMPORT_MAX_CHARS = 24000;
+
   async function handlePdf(f) {
     if (!/pdf$/i.test(f.name) && f.type !== 'application/pdf') { setStatus('That file is not a PDF.', true); return; }
+    if (f.size > PDF_MAX_BYTES) {
+      setStatus(`This PDF is ${(f.size / 1024 / 1024).toFixed(0)} MB — Lumen parses in your browser tab and caps files at 25 MB. Try splitting it or exporting a smaller version.`, true);
+      return;
+    }
+    if (f.size === 0) { setStatus('This file is empty (0 bytes).', true); return; }
     try {
       setStatus('Loading the PDF engine (pdf.js, once per session)…');
       const pdfjs = await loadPdfJs();
       setStatus(`Parsing ${f.name} locally…`);
       const buf = await f.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: buf }).promise;
+      const pages = Math.min(pdf.numPages, PDF_MAX_PAGES);
       let text = '';
-      for (let p = 1; p <= Math.min(pdf.numPages, 60); p++) {
-        setStatus(`Parsing page ${p}/${Math.min(pdf.numPages, 60)}…`);
+      for (let p = 1; p <= pages; p++) {
+        setStatus(`Extracting text — page ${p}/${pages}…`);
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         text += content.items.map(i => i.str).join(' ') + '\n\n';
       }
-      text = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 24000);
+      text = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      const truncated = text.length > IMPORT_MAX_CHARS;
+      text = text.slice(0, IMPORT_MAX_CHARS);
       if (text.replace(/\s/g, '').length < 50) {
-        setStatus("This PDF appears to be scanned images — Lumen can't read it yet. Try a text-based PDF.", true);
+        setStatus("This PDF appears to be scanned images — there's no text layer to extract. Lumen can't read it yet; try a text-based PDF or an OCR'd copy.", true);
         return;
       }
-      setStatus('');
+      const notices = [];
+      if (pdf.numPages > PDF_MAX_PAGES) notices.push(`first ${PDF_MAX_PAGES} of ${pdf.numPages} pages`);
+      if (truncated) notices.push(`trimmed to ${IMPORT_MAX_CHARS.toLocaleString()} characters`);
+      setStatus(notices.length ? `Imported ${notices.join(' · ')} — the preview below is editable.` : '');
       showReview({ title: f.name.replace(/\.pdf$/i, ''), content: text, source: `pdf:${f.name}` });
     } catch (err) {
+      const name = err?.name || '';
       const msg = String(err?.message || err);
-      if (/import|fetch|network|Failed to/i.test(msg) && !/Invalid PDF/i.test(msg)) {
+      if (name === 'PasswordException' || /password/i.test(msg)) {
+        setStatus('This PDF is password-protected. Remove the password (print/export an unlocked copy) and retry.', true);
+      } else if (name === 'InvalidPDFException' || /Invalid PDF/i.test(msg)) {
+        setStatus("This file isn't a valid PDF — it may be corrupted or renamed from another format.", true);
+      } else if (/import|fetch|network|Failed to/i.test(msg)) {
         setStatus('The PDF engine could not be downloaded (pdf.js CDN unreachable) — check your connection and retry.', true);
       } else {
         setStatus(`Couldn't parse this PDF (${msg.slice(0, 80)}). Try another file.`, true);
@@ -383,21 +419,47 @@ function openImport() {
     }
   }
 
-  // URL
+  // URL — fetched via r.jina.ai (a public reader that renders the page,
+  // including JS-heavy sites like Medium, and returns clean markdown).
   body.querySelector('#imp-fetch').addEventListener('click', async () => {
     const url = body.querySelector('#imp-url-input').value.trim();
     if (!/^https?:\/\//i.test(url)) { setStatus('Enter a full http(s):// URL.', true); return; }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);
     try {
-      setStatus('Fetching a readable copy via r.jina.ai…');
-      const resp = await fetch('https://r.jina.ai/' + url);
-      if (!resp.ok) throw new Error(`reader responded ${resp.status}`);
-      let text = (await resp.text()).trim().slice(0, 24000);
-      if (text.length < 80) throw new Error('the page returned almost no text');
+      setStatus('Fetching a readable copy via r.jina.ai (renders the page, strips chrome and scripts)…');
+      const resp = await fetch('https://r.jina.ai/' + url, { signal: ctrl.signal });
+      if (resp.status === 404) throw Object.assign(new Error('the page was not found (404)'), { kind: 'target' });
+      if (resp.status === 451 || resp.status === 403) throw Object.assign(new Error('the site refuses automated readers'), { kind: 'target' });
+      if (!resp.ok) throw Object.assign(new Error(`reader responded ${resp.status}`), { kind: 'reader' });
+      let text = (await resp.text()).trim();
+      // Images can't be embedded — keep captions/alt text, drop the binaries.
+      text = text
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_, alt) => alt ? `(image: ${alt})` : '')
+        .replace(/\n{3,}/g, '\n\n').trim();
+      const truncated = text.length > IMPORT_MAX_CHARS;
+      text = text.slice(0, IMPORT_MAX_CHARS);
+      if (text.length < 80) {
+        setStatus('The page returned almost no text — it may require login, be paywalled, or be entirely images/video. Lumen can only import what a logged-out reader can see.', true);
+        return;
+      }
+      if (text.length < 600 && /sign.?in|log.?in|subscribe|create.+account|enable javascript/i.test(text)) {
+        setStatus('This looks like a login or paywall page, not the article. Content behind authentication can\'t be fetched — try the public version or paste the text into a new note.', true);
+        return;
+      }
       const firstHeading = text.match(/^Title:\s*(.+)$/m)?.[1] || text.match(/^#\s+(.+)$/m)?.[1];
-      setStatus('');
+      setStatus(truncated ? `Long page — trimmed to ${IMPORT_MAX_CHARS.toLocaleString()} characters. The preview below is editable.` : '');
       showReview({ title: (firstHeading || url.replace(/^https?:\/\//, '').slice(0, 60)).trim(), content: text, source: url });
     } catch (err) {
-      setStatus(`Couldn't fetch this URL — the reader may be blocked or the page requires login (${String(err.message || err).slice(0, 80)}).`, true);
+      if (err.name === 'AbortError') {
+        setStatus('Timed out after 25s — the page may be very heavy or the reader is slow right now. Retry, or paste the text into a new note.', true);
+      } else if (err.kind === 'target') {
+        setStatus(`Couldn't import this page — ${err.message}. Try the article's canonical URL.`, true);
+      } else {
+        setStatus(`Couldn't reach the reader service (${String(err.message || err).slice(0, 80)}). Check your connection and retry.`, true);
+      }
+    } finally {
+      clearTimeout(timer);
     }
   });
 }

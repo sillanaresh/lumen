@@ -125,6 +125,28 @@ export function download(filename, content, type = 'application/json') {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+// Animate the numeric part of an element's text from 0 to its value,
+// preserving any prefix/suffix ("76%", "0.86", "<1ms"). No-op without a
+// number or under prefers-reduced-motion.
+export function countUp(el, duration = 750) {
+  const text = el.textContent;
+  const m = text.match(/-?\d+(\.\d+)?/);
+  if (!m || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const target = parseFloat(m[0]);
+  const decimals = m[1] ? m[1].length - 1 : 0;
+  const prefix = text.slice(0, m.index);
+  const suffix = text.slice(m.index + m[0].length);
+  const t0 = performance.now();
+  const frame = (now) => {
+    const p = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = prefix + (target * eased).toFixed(decimals) + suffix;
+    if (p < 1) requestAnimationFrame(frame);
+    else el.textContent = text;
+  };
+  requestAnimationFrame(frame);
+}
+
 // Sanitized markdown rendering (Marked + DOMPurify are global CDN scripts).
 export function renderMarkdown(md) {
   const html = window.marked ? window.marked.parse(String(md ?? '')) : escapeHtml(md);

@@ -4,7 +4,7 @@
 
 import { state, corpusMatchesSeed, resetWorkspace, embedder, idbAll, idbSet, idbDel } from '../store.js';
 import { rankChunks, rankOfFirstGold, isNoAnswer, computeMetrics, metricsMarkdownTable } from '../pipeline.js';
-import { escapeHtml, pct, fmtMs, toast, download, scoreBar } from '../ui.js';
+import { escapeHtml, pct, fmtMs, toast, download, scoreBar, countUp } from '../ui.js';
 import { openNote } from './library.js';
 
 let benchmark = null;     // loaded benchmark.json
@@ -20,7 +20,7 @@ export function render(root) {
       <header class="lab-head">
         <div>
           <div class="kicker">Eval Lab</div>
-          <h1>Measured, not vibes</h1>
+          <h1>Measured, <span class="grad-text">not vibes</span></h1>
           <p class="dim lab-sub">Lumen ships its own benchmark: hand-written questions mapped to gold notes, including
           no-answer traps that test hallucination resistance. The runner calls the exact retrieval pipeline Ask uses —
           same functions, same data. Everything runs and persists in this browser.</p>
@@ -258,6 +258,7 @@ function renderMetrics(root) {
       <div class="metric-label">run</div>
       <div class="metric-sub dim mono">${escapeHtml(lastRun.config.mode)} · top-${lastRun.config.topK} · ${new Date(lastRun.timestamp).toLocaleString()}${lastRun.incomplete ? ' · <span class="warn-text">incomplete</span>' : ''}${lastRun.config.corpusMatchesSeed === false ? ' · <span class="warn-text">corpus drifted</span>' : ''}</div>
     </div>`;
+  grid.querySelectorAll('.metric-value').forEach(el => countUp(el));
 }
 
 function renderRows(root) {

@@ -11,11 +11,14 @@ let edgeMode = 'tags'; // 'tags' | 'semantic'
 let sim = null;
 let unsubs = [];
 
-const PALETTE = ['#ffd166', '#7dd3fc', '#c4b5fd', '#f0abfc', '#86efac', '#fca5a5', '#fdba74', '#67e8f9'];
+// One palette per theme: glowing pastels on night, inked hues on paper.
+const PALETTE_DARK = ['#ffd166', '#7dd3fc', '#c4b5fd', '#f0abfc', '#86efac', '#fca5a5', '#fdba74', '#67e8f9'];
+const PALETTE_LIGHT = ['#b8830a', '#0e7490', '#7c3aed', '#be185d', '#15803d', '#b91c1c', '#c2410c', '#0369a1'];
 function tagColor(tag) {
+  const palette = document.documentElement.dataset.theme === 'dark' ? PALETTE_DARK : PALETTE_LIGHT;
   let h = 0;
   for (const ch of tag || '') h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return PALETTE[Math.abs(h) % PALETTE.length];
+  return palette[Math.abs(h) % palette.length];
 }
 const nodeColor = (n) => tagColor((n.tags || [])[0] || n.title);
 
@@ -51,11 +54,14 @@ export function render(root) {
 
   draw(root);
   unsubs.forEach(u => u());
+  const onTheme = () => { if (document.body.contains(root.firstElementChild)) draw(root); };
+  window.addEventListener('lumen:theme', onTheme);
   unsubs = [
     on('notes', () => document.body.contains(root.firstElementChild) && draw(root)),
     on('embedder', () => {
       if (edgeMode === 'semantic' && embedder.status === 'ready' && document.body.contains(root.firstElementChild)) draw(root);
     }),
+    () => window.removeEventListener('lumen:theme', onTheme),
   ];
 }
 
@@ -116,6 +122,16 @@ function draw(root) {
   const svg = d3.select(svgEl);
   svg.selectAll('*').remove();
   const { width, height } = svgEl.getBoundingClientRect();
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Soft halo behind each node — the "lumen" of the graph.
+  const glow = svg.append('defs').append('filter')
+    .attr('id', 'node-glow').attr('x', '-70%').attr('y', '-70%').attr('width', '240%').attr('height', '240%');
+  glow.append('feGaussianBlur').attr('stdDeviation', 3.2).attr('result', 'halo');
+  const merge = glow.append('feMerge');
+  merge.append('feMergeNode').attr('in', 'halo');
+  merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
   const g = svg.append('g');
 
   svg.call(d3.zoom().scaleExtent([0.4, 3]).on('zoom', (e) => g.attr('transform', e.transform)));
@@ -131,18 +147,28 @@ function draw(root) {
     degree.set(e.source, (degree.get(e.source) || 0) + 1);
     degree.set(e.target, (degree.get(e.target) || 0) + 1);
   });
+  const radius = (d) => 9 + Math.min(8, (degree.get(d.id) || 0) * 1.1);
 
-  node.append('circle')
-    .attr('r', d => 9 + Math.min(8, (degree.get(d.id) || 0) * 1.1))
+  const circles = node.append('circle')
+    .attr('r', reduceMotion ? radius : 0)
     .attr('fill', d => nodeColor(d) + '33')
     .attr('stroke', d => nodeColor(d))
-    .attr('stroke-width', 1.6);
+    .attr('stroke-width', 1.6)
+    .attr('filter', 'url(#node-glow)');
 
   node.append('text')
     .attr('class', 'graph-label')
     .attr('dy', d => 22 + Math.min(8, (degree.get(d.id) || 0) * 1.1))
     .attr('text-anchor', 'middle')
+    .attr('opacity', reduceMotion ? 1 : 0)
     .text(d => d.title.length > 26 ? d.title.slice(0, 24) + '…' : d.title);
+
+  if (!reduceMotion) {
+    circles.transition().duration(550).delay((d, i) => 60 + i * 45)
+      .ease(d3.easeBackOut.overshoot(1.6)).attr('r', radius);
+    node.selectAll('text').transition().duration(400).delay((d, i) => 220 + i * 45).attr('opacity', 1);
+    link.attr('opacity', 0).transition().duration(500).delay((d, i) => 350 + i * 18).attr('opacity', 1);
+  }
 
   const hover = root.querySelector('#graph-hover');
   node

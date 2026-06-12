@@ -7,7 +7,7 @@ export function render(root) {
   <div class="about">
     <section class="about-hero">
       <div class="kicker">About Lumen</div>
-      <h1>Private notes AI,<br/>measured in the open.</h1>
+      <h1>Private notes AI,<br/><span class="grad-text">measured in the open.</span></h1>
       <p class="about-lede">Most AI note tools ask you to trust a black box. Lumen is built on the opposite bet:
       <strong>an AI product earns trust by showing its work and publishing its numbers.</strong></p>
       <div class="about-pillars">

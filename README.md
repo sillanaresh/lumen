@@ -44,6 +44,9 @@ Benchmark: [`benchmark.json`](benchmark.json) · Methodology and caveats: [`docs
 | Ask (with API key) | The retrieved chunks shown in Evidence + your question | OpenRouter, with **your** key, to the model **you** chose |
 | URL import | The URL you paste | r.jina.ai, which returns a readable copy |
 | Send feedback | A GitHub issue draft you see before posting | GitHub, only if you submit it |
+| Opening Settings | A plain GET for the public model catalog (nothing about you) | OpenRouter |
+
+The API key itself is **optional**: notes, graph, search, retrieval, and the Eval Lab's retrieval metrics all run with no key at all — only answer *generation* needs one.
 
 Everything else — notes, PDFs (parsed in-browser by pdf.js), embeddings, eval runs, feedback, your key — stays in the browser. Clear site data and it's gone.
 

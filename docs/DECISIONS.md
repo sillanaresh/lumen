@@ -6,6 +6,20 @@ choices should be inspectable — same as answers.
 
 ---
 
+## D-014 · Light theme is the default
+
+**Decision:** Two themes from one token set — warm paper (default) and deep night — with a persisted toggle, applied before first paint.
+
+**Why light default:** This product gets evaluated in screen-shares, offices, and recruiter laptops, where dark UIs read as hobby-project. Light-first also forces honesty in the design system: glows and glass that only work on black are decoration, not design. Amber survives both — as ink on paper, as light at night.
+
+## D-013 · The model list is fetched live, never hardcoded
+
+**Decision:** Settings fetches OpenRouter's public model catalog on open (plain GET, disclosed in the privacy list), shows all current free models, and offers a custom-ID field for any paid model. A small static list backstops offline use; retired saved models migrate to the default.
+
+**Why (a lesson, not a guess):** The v0.x hardcoded list aged into being *wrong* — two of its four models no longer existed on OpenRouter within months, which means a fresh user's first generation request would simply fail. Model catalogs churn weekly; shipping a frozen list is shipping a future bug. The catalog endpoint needs no key and carries no user data, so the privacy cost is one disclosed GET.
+
+**Cost accepted:** One more outbound flow to explain, and the dropdown quality depends on OpenRouter's metadata. The free-models-only grouping is deliberate: users with credits know their model ID; new users should not be one click from a surprise bill.
+
 ## D-012 · Refuse before generating, not after
 
 **Decision:** The no-answer gate runs on local retrieval scores *before* any model call. Below threshold, Lumen renders "Your notes don't seem to cover this" with a link to the evidence and an explicit "Ask the model anyway" override.

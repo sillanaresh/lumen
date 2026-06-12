@@ -1,8 +1,8 @@
 // app.js — shell: routing, top bar, command palette, settings, onboarding, import.
 
 import { initWorkspace, state, on, embedder, loadSettings, saveSettings, loadFeedback,
-         createNote, duplicateOf, resetWorkspace, isOnboarded, setOnboarded, MODELS,
-         idbCount } from './store.js';
+         createNote, duplicateOf, resetWorkspace, isOnboarded, setOnboarded,
+         FALLBACK_MODELS, fetchModelCatalog, DEFAULT_MODEL, idbCount } from './store.js';
 import { stripMarkdown } from './pipeline.js';
 import { testKey } from './openrouter.js';
 import { el, escapeHtml, toast, openModal, download } from './ui.js';
@@ -54,6 +54,8 @@ function route() {
   }
   document.querySelectorAll('[data-nav]').forEach(b =>
     b.classList.toggle('nav-active', b.dataset.nav === name));
+  const viewLabel = document.getElementById('topbar-view');
+  if (viewLabel) viewLabel.textContent = `/ ${ROUTES[name].title}`;
   document.title = `Lumen — ${ROUTES[name].title}`;
 }
 
@@ -69,13 +71,12 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode */ }
   window.dispatchEvent(new CustomEvent('lumen:theme')); // graph re-inks its palette
-  const btn = document.getElementById('theme-toggle');
-  if (btn) {
+  const next = theme === 'dark' ? 'light' : 'dark';
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON;
-    const next = theme === 'dark' ? 'light' : 'dark';
     btn.title = `Switch to ${next} mode`;
     btn.setAttribute('aria-label', `Switch to ${next} mode`);
-  }
+  });
 }
 
 // ---------- AI status pill ----------
@@ -100,21 +101,21 @@ export function openSettings() {
   const body = el('div', { class: 'settings' });
   body.innerHTML = `
     <section class="set-section">
-      <h3 class="rail-title">OpenRouter API key</h3>
+      <h3 class="rail-title">OpenRouter API key <span class="dim">· optional</span></h3>
       <div class="set-key-row">
         <input id="set-key" type="password" class="input mono" placeholder="sk-or-…" value="${escapeHtml(s.apiKey || '')}" autocomplete="off" />
-        <button id="set-key-show" class="btn btn-ghost btn-sm" aria-label="Show or hide key">show</button>
-        <button id="set-key-test" class="btn btn-ghost btn-sm">test key</button>
+        <button id="set-key-show" class="btn btn-ghost btn-sm" aria-label="Show or hide key">Show</button>
+        <button id="set-key-test" class="btn btn-ghost btn-sm">Test key</button>
       </div>
-      <p class="dim set-hint" id="set-key-status">Stored only in this browser's localStorage; sent only to OpenRouter.
+      <p class="dim set-hint" id="set-key-status">Only answer <em>generation</em> needs a key — notes, graph, search, retrieval, and the Eval Lab's retrieval metrics all work without one. Stored in this browser; sent only to OpenRouter.
         <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free key →</a></p>
     </section>
     <section class="set-section">
       <h3 class="rail-title">Model</h3>
-      <select id="set-model" class="input">
-        ${MODELS.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === s.model ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
-      </select>
-      <p class="dim set-hint">All free-tier; OpenRouter rate-limits them. Answers cite chunks regardless of model.</p>
+      <select id="set-model" class="input"></select>
+      <input id="set-model-custom" class="input mono" placeholder="vendor/model-id — browse openrouter.ai/models" value="" hidden style="margin-top:8px" />
+      <p class="dim set-hint" id="set-model-hint">Free models cost $0 (rate-limited). With credits on your key, pick <em>Custom</em> and paste any model ID from
+        <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models</a>. Answers must cite chunks regardless of model.</p>
     </section>
     <section class="set-section">
       <h3 class="rail-title">What leaves your machine</h3>
@@ -122,6 +123,7 @@ export function openSettings() {
         <li><strong>Ask</strong> — the retrieved chunks shown in Evidence + your question → OpenRouter, with your key.</li>
         <li><strong>URL import</strong> — the URL you paste → r.jina.ai for a readable copy.</li>
         <li><strong>Send feedback</strong> — opens a GitHub issue draft you review before posting.</li>
+        <li><strong>This dialog</strong> — fetches OpenRouter's public model catalog (a plain GET; nothing about you or your notes).</li>
         <li>Everything else (notes, PDFs, embeddings, eval runs, feedback, this key) stays in this browser.</li>
       </ul>
     </section>
@@ -151,6 +153,33 @@ export function openSettings() {
   idbCount('embeddings').then(n => { const c = body.querySelector('#set-cache-count'); if (c) c.textContent = n; }).catch(() => {});
   const fb = loadFeedback();
   body.querySelector('#set-fb-count').textContent = `· ${fb.length} item${fb.length === 1 ? '' : 's'}`;
+
+  // Model picker: live free catalog (fallback list offline) + custom ID.
+  const modelSel = body.querySelector('#set-model');
+  const modelCustom = body.querySelector('#set-model-custom');
+  const modelHint = body.querySelector('#set-model-hint');
+  const fillModels = (models, live) => {
+    const known = models.some(m => m.id === s.model);
+    modelSel.innerHTML = `
+      <optgroup label="Free on OpenRouter${live ? ` · ${models.length} models, live` : ' · offline fallback list'}">
+        ${models.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === s.model ? 'selected' : ''}>${escapeHtml(m.name)}${m.id === DEFAULT_MODEL ? ' — recommended' : ''}</option>`).join('')}
+      </optgroup>
+      <optgroup label="Bring your own credits">
+        <option value="__custom" ${known ? '' : 'selected'}>Custom model ID…</option>
+      </optgroup>`;
+    modelCustom.hidden = known;
+    if (!known) modelCustom.value = s.model;
+  };
+  fillModels(FALLBACK_MODELS, false);
+  fetchModelCatalog().then(models => {
+    if (models && document.body.contains(modelSel)) fillModels(models, true);
+    else if (!models && modelHint) modelHint.insertAdjacentHTML('afterbegin',
+      '<span class="warn-text">Couldn\'t reach the live catalog — showing a fallback list. </span>');
+  });
+  modelSel.addEventListener('change', () => {
+    modelCustom.hidden = modelSel.value !== '__custom';
+    if (!modelCustom.hidden) modelCustom.focus();
+  });
 
   body.querySelector('#set-key-show').addEventListener('click', (e) => {
     const input = body.querySelector('#set-key');
@@ -186,7 +215,8 @@ export function openSettings() {
   });
   cancel.addEventListener('click', m.close);
   save.addEventListener('click', () => {
-    saveSettings({ ...s, apiKey: body.querySelector('#set-key').value.trim(), model: body.querySelector('#set-model').value });
+    const picked = modelSel.value === '__custom' ? modelCustom.value.trim() : modelSel.value;
+    saveSettings({ ...s, apiKey: body.querySelector('#set-key').value.trim(), model: picked || DEFAULT_MODEL });
     m.close();
     toast('Settings saved in this browser.', { kind: 'success' });
     route(); // refresh hints (e.g., ask composer model hint)
@@ -452,37 +482,48 @@ function startOnboarding(step = 0) {
 function boot() {
   initWorkspace();
 
-  document.getElementById('topbar').innerHTML = `
-    <a class="brand" href="#/graph">
+  const NAV_ICONS = {
+    graph: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.6"/><circle cx="19" cy="6" r="2.6"/><circle cx="12" cy="18" r="2.6"/><line x1="7" y1="7.6" x2="10.4" y2="15.8"/><line x1="17" y1="7.6" x2="13.6" y2="15.8"/><line x1="7.6" y1="6" x2="16.4" y2="6"/></svg>',
+    library: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
+    ask: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+    lab: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="5"/><rect x="12" y="7" width="3" height="9"/><rect x="17" y="9" width="3" height="7"/></svg>',
+    about: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><circle cx="12" cy="8.2" r="0.6" fill="currentColor"/></svg>',
+  };
+  const ICON_GEAR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+  const ICON_GITHUB = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+
+  document.getElementById('sidebar').innerHTML = `
+    <a class="brand" href="#/graph" title="Lumen">
       <span class="brand-dot"></span>
-      <span class="brand-name">Lumen</span>
-      <span class="brand-ver mono">2.0</span>
     </a>
-    <nav class="main-nav" aria-label="Primary">
-      <button data-nav="graph">Graph</button>
-      <button data-nav="library">Library</button>
-      <button data-nav="ask">Ask</button>
-      <button data-nav="lab">Eval Lab</button>
-      <button data-nav="about">About</button>
+    <nav class="side-nav" aria-label="Primary">
+      ${Object.entries(ROUTES).map(([key, r]) => `
+        <button data-nav="${key}" title="${escapeHtml(r.title)}">
+          ${NAV_ICONS[key]}
+          <span class="side-nav-label">${escapeHtml(r.title)}</span>
+        </button>`).join('')}
     </nav>
-    <div class="topbar-right">
-      <button id="palette-open" class="btn btn-ghost btn-sm palette-trigger" title="Search & commands">
-        <span>Search</span><kbd class="mono">⌘K</kbd>
-      </button>
-      <button id="import-open" class="btn btn-ghost btn-sm">Import</button>
-      <button id="ai-pill" class="ai-pill ai-idle"></button>
-      <button id="theme-toggle" class="icon-btn"></button>
-      <button id="settings-open" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
-      <a class="icon-btn" href="https://github.com/sillanaresh/lumen" target="_blank" rel="noopener" title="Source on GitHub" aria-label="GitHub">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-      </a>
+    <div class="side-foot">
+      <button class="icon-btn theme-toggle-btn"></button>
+      <button id="settings-open" class="icon-btn" title="Settings" aria-label="Settings">${ICON_GEAR}</button>
+      <a class="icon-btn" href="https://github.com/sillanaresh/lumen" target="_blank" rel="noopener" title="Source on GitHub" aria-label="GitHub">${ICON_GITHUB}</a>
     </div>`;
 
-  document.querySelectorAll('[data-nav]').forEach(b =>
-    b.addEventListener('click', () => navigate(`#/${b.dataset.nav}`)));
-  applyTheme(currentTheme());
-  document.getElementById('theme-toggle').addEventListener('click', () =>
-    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
+  document.getElementById('topbar').innerHTML = `
+    <span class="topbar-title">
+      <span class="brand-name">Lumen</span>
+      <span class="brand-ver mono">2.0</span>
+      <span id="topbar-view" class="topbar-view dim"></span>
+    </span>
+    <button id="palette-open" class="palette-trigger" title="Search & commands">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search notes, run commands…</span><kbd class="mono">⌘K</kbd>
+    </button>
+    <div class="topbar-right">
+      <button id="import-open" class="btn btn-ghost btn-sm">Import</button>
+      <button id="ai-pill" class="ai-pill ai-idle"></button>
+    </div>`;
+
   document.getElementById('settings-open').addEventListener('click', openSettings);
   document.getElementById('import-open').addEventListener('click', openImport);
   document.getElementById('palette-open').addEventListener('click', openPalette);
@@ -493,11 +534,18 @@ function boot() {
     }
   });
 
-  // mobile bottom nav
+  // mobile bottom nav (sidebar is hidden there; settings/theme ride along)
   document.getElementById('mobile-nav').innerHTML = ['library', 'ask', 'lab', 'about']
-    .map(n => `<button data-nav="${n}">${ROUTES[n].title}</button>`).join('');
-  document.querySelectorAll('#mobile-nav [data-nav]').forEach(b =>
+    .map(n => `<button data-nav="${n}">${ROUTES[n].title}</button>`).join('')
+    + `<button class="icon-btn theme-toggle-btn"></button>
+       <button id="mobile-settings" class="icon-btn" title="Settings" aria-label="Settings">${ICON_GEAR}</button>`;
+  document.getElementById('mobile-settings').addEventListener('click', openSettings);
+
+  document.querySelectorAll('[data-nav]').forEach(b =>
     b.addEventListener('click', () => navigate(`#/${b.dataset.nav}`)));
+  applyTheme(currentTheme());
+  document.querySelectorAll('.theme-toggle-btn').forEach(b =>
+    b.addEventListener('click', () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark')));
 
   on('embedder', renderAiPill);
   renderAiPill();

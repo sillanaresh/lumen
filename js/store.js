@@ -16,12 +16,52 @@ const LS_FEEDBACK = 'lumen2.feedback.v1';
 const LS_ONBOARDED = 'lumen2.onboarded.v1';
 const LEGACY_USER_NOTES = 'lumen.userNotes.v1'; // v0.x format, migrated on first boot
 
-export const MODELS = [
-  { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free) — recommended', pricePer1k: 0 },
-  { id: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (free)', pricePer1k: 0 },
-  { id: 'deepseek/deepseek-chat-v3.1:free', label: 'DeepSeek Chat v3.1 (free)', pricePer1k: 0 },
-  { id: 'meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B (free) — fastest', pricePer1k: 0 },
+// Static fallback if the live catalog can't be fetched (offline). Verified
+// against openrouter.ai/api/v1/models — free models churn, so Settings
+// fetches the live list and this only backstops it.
+export const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+export const FALLBACK_MODELS = [
+  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct (free)' },
+  { id: 'openai/gpt-oss-120b:free', name: 'GPT-OSS 120B (free)' },
+  { id: 'qwen/qwen3-next-80b-a3b-instruct:free', name: 'Qwen3 Next 80B (free)' },
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (free)' },
+  { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Nemotron 3 Super 120B (free)' },
 ];
+// Models that used to ship as defaults but no longer exist on OpenRouter;
+// saved settings pointing at them are migrated to DEFAULT_MODEL.
+const RETIRED_MODELS = new Set([
+  'google/gemini-2.0-flash-exp:free',
+  'deepseek/deepseek-chat-v3.1:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+]);
+
+// Live free-model catalog from OpenRouter's public endpoint (a plain GET —
+// no key, nothing personal). Cached for the session; null on failure.
+let catalogPromise = null;
+export function fetchModelCatalog() {
+  if (!catalogPromise) {
+    catalogPromise = (async () => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const resp = await fetch('https://openrouter.ai/api/v1/models', { signal: ctrl.signal });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const free = (data.data || [])
+          .filter(m => m.id.endsWith(':free'))
+          .map(m => ({ id: m.id, name: m.name || m.id, ctx: m.context_length || 0 }))
+          .sort((a, b) => b.ctx - a.ctx || a.id.localeCompare(b.id));
+        return free.length ? free : null;
+      } catch {
+        catalogPromise = null; // allow a retry next open
+        return null;
+      } finally {
+        clearTimeout(t);
+      }
+    })();
+  }
+  return catalogPromise;
+}
 
 // ---------- Tiny IndexedDB promise wrapper ----------
 const IDB_NAME = 'lumen2';
@@ -80,7 +120,9 @@ function lsJson(key, fallback) {
 }
 
 export function loadSettings() {
-  return { apiKey: '', model: MODELS[0].id, ...lsJson(LS_SETTINGS, {}) };
+  const s = { apiKey: '', model: DEFAULT_MODEL, ...lsJson(LS_SETTINGS, {}) };
+  if (RETIRED_MODELS.has(s.model)) s.model = DEFAULT_MODEL;
+  return s;
 }
 export function saveSettings(s) { localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); }
 

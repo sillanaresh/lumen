@@ -90,4 +90,17 @@ export function render(root) {
       </p>
     </footer>
   </div>`;
+
+  // Sections rise into view as you scroll.
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target); }
+      }
+    }, { root: root.querySelector('.about'), threshold: 0.12 });
+    root.querySelectorAll('.about-section, .about-foot').forEach(s => {
+      s.classList.add('reveal');
+      io.observe(s);
+    });
+  }
 }

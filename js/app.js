@@ -247,6 +247,20 @@ function confirmReset() {
 }
 
 // ---------- Import (PDF / URL) ----------
+// pdf.js v4+ ships only as an ES module — loaded lazily, once, on first PDF.
+let pdfjsPromise = null;
+function loadPdfJs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs')
+      .then(mod => {
+        mod.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
+        return mod;
+      })
+      .catch(err => { pdfjsPromise = null; throw err; });
+  }
+  return pdfjsPromise;
+}
 function openImport() {
   const body = el('div');
   body.innerHTML = `
@@ -339,11 +353,12 @@ function openImport() {
 
   async function handlePdf(f) {
     if (!/pdf$/i.test(f.name) && f.type !== 'application/pdf') { setStatus('That file is not a PDF.', true); return; }
-    if (!window.pdfjsLib) { setStatus('PDF engine (pdf.js) failed to load from CDN — check your connection.', true); return; }
     try {
+      setStatus('Loading the PDF engine (pdf.js, once per session)…');
+      const pdfjs = await loadPdfJs();
       setStatus(`Parsing ${f.name} locally…`);
       const buf = await f.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      const pdf = await pdfjs.getDocument({ data: buf }).promise;
       let text = '';
       for (let p = 1; p <= Math.min(pdf.numPages, 60); p++) {
         setStatus(`Parsing page ${p}/${Math.min(pdf.numPages, 60)}…`);
@@ -359,7 +374,12 @@ function openImport() {
       setStatus('');
       showReview({ title: f.name.replace(/\.pdf$/i, ''), content: text, source: `pdf:${f.name}` });
     } catch (err) {
-      setStatus(`Couldn't parse this PDF (${String(err.message || err).slice(0, 80)}). Try another file.`, true);
+      const msg = String(err?.message || err);
+      if (/import|fetch|network|Failed to/i.test(msg) && !/Invalid PDF/i.test(msg)) {
+        setStatus('The PDF engine could not be downloaded (pdf.js CDN unreachable) — check your connection and retry.', true);
+      } else {
+        setStatus(`Couldn't parse this PDF (${msg.slice(0, 80)}). Try another file.`, true);
+      }
     }
   }
 

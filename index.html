@@ -29,19 +29,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css" />
 
-<!-- Rendering & ingestion libs (global scripts; the app itself is ES modules in /js) -->
+<!-- Rendering libs (global scripts; the app itself is ES modules in /js).
+     pdf.js is an ES module in v4+ and is lazy-loaded by the import flow. -->
 <script src="https://d3js.org/d3.v7.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js" defer></script>
-<script defer>
-  window.addEventListener('DOMContentLoaded', () => {
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
-    }
-  });
-</script>
 </head>
 <body>
   <div id="app">

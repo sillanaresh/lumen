@@ -900,7 +900,7 @@ html[data-theme="dark"] .prose code { color: var(--accent-2); }
 .info-dot-down::after { bottom: auto; top: calc(100% + 8px); transform: translateX(-50%) translateY(-4px); }
 .info-dot:hover::after, .info-dot:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 /* keep the bubble on-screen when the ⓘ sits near the right edge */
-.graph-overlay-tr .info-dot::after, .lab-controls .info-dot::after { left: auto; right: -8px; transform: translateY(-4px); }
+.graph-overlay-tr .info-dot::after, .lab-controls .info-dot::after { left: auto; right: -8px; bottom: auto; top: calc(100% + 8px); transform: translateY(-4px); }
 .graph-overlay-tr .info-dot:hover::after, .graph-overlay-tr .info-dot:focus-visible::after,
 .lab-controls .info-dot:hover::after, .lab-controls .info-dot:focus-visible::after { transform: translateY(0); }
 
